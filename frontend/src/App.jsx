@@ -531,7 +531,7 @@ function FeedbackButton() {
           gap: 6,
         }}
       >
-        💬 משוב
+        <window.Icon.MessageCircle size={14} stroke={2} /> משוב
       </button>
 
       {open && (
@@ -803,7 +803,8 @@ function TweaksHost({ tw, setTw, user, onOpenHistory }) {
             border: "1px solid var(--line)", background: "var(--card)",
             color: "var(--ink-2)", cursor: "pointer", fontFamily: "inherit",
           }}
-        >📚 פתח היסטוריה</button>
+        style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+        ><window.Icon.Book size={13} stroke={1.8} /> פתח היסטוריה</button>
       </TS>
       <TS label={t("tweaksAboutMe")}>
         <AboutMeEditor />
@@ -922,7 +923,7 @@ function LoginScreen({ error }) {
             textAlign: "start", fontSize: 12,
           }}>
             <div style={{ color: "var(--ink-3)", marginBottom: 8, fontWeight: 600 }}>
-              ⚙️ Dev mode — pick a user (no Google needed)
+              Dev mode — pick a user (no Google needed)
             </div>
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
               <select

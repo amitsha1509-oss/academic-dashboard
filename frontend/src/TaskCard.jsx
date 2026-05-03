@@ -37,18 +37,22 @@ function TaskCard({ task, onToggleDone, onDelete, onEdit, onToggleStep, onDismis
         paddingBlock: compact ? 10 : 14,
         paddingInlineStart: compact ? 18 : 22,
         paddingInlineEnd: compact ? 14 : 16,
-        boxShadow: hover ? "var(--shadow-2)" : "var(--shadow-1)",
-        transform: hover ? "translateY(-1px)" : "translateY(0)",
+        boxShadow: hover
+          ? "0 6px 20px -4px rgba(28,27,25,.14), 0 1px 4px rgba(28,27,25,.08)"
+          : (task.urgency === "high" && !done ? "0 0 0 1.5px rgba(194,74,42,.18), var(--shadow-1)" : "var(--shadow-1)"),
+        transform: hover ? "translateY(-3px)" : "translateY(0)",
         transition: "all .18s cubic-bezier(.4,0,.2,1)",
         cursor: "pointer",
         opacity: done ? 0.5 : 1,
         animation: highlighted ? "pulse-soft 1.5s ease-in-out 2" : (task._isNew ? "spring-in .4s cubic-bezier(.34,1.56,.64,1)" : "none"),
       }}
     >
-      {/* Urgency edge */}
+      {/* Urgency edge — wider for high urgency */}
       <div style={{
-        position: "absolute", insetInlineStart: 0, top: 8, bottom: 8, width: 3,
+        position: "absolute", insetInlineStart: 0, top: 6, bottom: 6,
+        width: task.urgency === "high" ? 4 : 3,
         background: urgColor, borderStartEndRadius: 3, borderEndEndRadius: 3,
+        opacity: done ? 0.4 : 1,
       }}/>
 
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>

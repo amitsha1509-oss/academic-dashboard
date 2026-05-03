@@ -77,6 +77,8 @@ function CaptureBar({ onCreate, onStartManual, classifying, seedRef }) {
 
   const Send = window.Icon.Send;
   const Sparkles = window.Icon.Sparkles;
+  const CalendarIcon = window.Icon.Calendar;
+  const PencilIcon = window.Icon.Pencil;
 
   return (
     <div style={{
@@ -163,12 +165,11 @@ function CaptureBar({ onCreate, onStartManual, classifying, seedRef }) {
               cursor: classifying ? "default" : "pointer",
               transition: "all .15s ease",
               flexShrink: 0,
-              fontSize: 15,
               marginInlineEnd: 2,
             }}
             title="בחר תאריך יעד"
           >
-            📅
+            <CalendarIcon size={16} stroke={1.8} />
           </button>
 
           {/* Manual-entry button: skip AI, set dimensions yourself. */}
@@ -191,7 +192,7 @@ function CaptureBar({ onCreate, onStartManual, classifying, seedRef }) {
               }}
               title={t("manualEntryTitle")}
             >
-              ✎
+              <PencilIcon size={14} stroke={1.8} />
             </button>
           )}
 
@@ -225,16 +226,6 @@ function CaptureBar({ onCreate, onStartManual, classifying, seedRef }) {
               type="datetime-local"
               value={pickedDue}
               onChange={e => setPickedDue(e.target.value)}
-              style={{
-                border: "1px solid var(--line-strong)",
-                borderRadius: 8,
-                padding: "4px 8px",
-                fontSize: 12.5,
-                color: "var(--ink)",
-                background: "var(--card)",
-                fontFamily: "inherit",
-                cursor: "pointer",
-              }}
             />
             {pickedDue && (
               <button

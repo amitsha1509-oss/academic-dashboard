@@ -6,7 +6,7 @@
 <title>לוח בקרה אקדמי</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
   :root{
     /* Warm paper palette */
@@ -55,6 +55,7 @@
 
     --font-sans: "Inter Tight", "Heebo", system-ui, sans-serif;
     --font-serif: "Instrument Serif", Georgia, serif;
+    --font-display: "Frank Ruhl Libre", "Instrument Serif", Georgia, serif;
     --font-mono: "JetBrains Mono", ui-monospace, monospace;
   }
 
@@ -152,8 +153,39 @@
 
   .rtl { direction: rtl; text-align: right; font-family: "Heebo", "Inter Tight", sans-serif; }
 
+  /* Urgency pulse for high-urgency cards */
+  @keyframes urg-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(194,74,42,0), var(--shadow-1); }
+    50% { box-shadow: 0 0 0 3px rgba(194,74,42,.10), var(--shadow-1); }
+  }
+
+  /* Native input overrides — match app aesthetic */
+  input[type="color"] {
+    -webkit-appearance: none;
+    appearance: none;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-md);
+    padding: 2px;
+    cursor: pointer;
+    background: var(--paper);
+  }
+  input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; border-radius: 7px; }
+  input[type="color"]::-webkit-color-swatch { border: none; border-radius: 7px; }
+  input[type="datetime-local"] {
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-md);
+    padding: 5px 10px;
+    background: var(--card);
+    color: var(--ink);
+    font-size: 12.5px;
+    cursor: pointer;
+    outline: none;
+  }
+  input[type="datetime-local"]:focus { border-color: var(--accent); }
+
   /* Utility */
   .serif { font-family: var(--font-serif); font-weight: 400; }
+  .display { font-family: var(--font-display); font-weight: 400; }
   .mono { font-family: var(--font-mono); }
 </style>
 

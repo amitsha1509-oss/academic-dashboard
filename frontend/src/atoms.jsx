@@ -123,35 +123,28 @@ function ContextChip({ context }) {
 // ─── Level chip (importance / urgency) ──────────────────────
 const KIND_HE = { urgency: "דחיפות", importance: "חשיבות" };
 const LEVEL_HE = { low: "נמוך", medium: "בינוני", high: "גבוה" };
-const KIND_SHORT_HE = { urgency: "ד", importance: "ח" };
-const LEVEL_SHORT_HE = { low: "נמוך", medium: "בינוני", high: "גבוה" };
+
+const URG_LABELS  = { high: "דחוף",     medium: "בינוני",  low: "לא דחוף" };
+const IMP_LABELS  = { high: "חשוב",     medium: "בינ׳",    low: "לא חשוב" };
 
 function LevelChip({ kind, value }) {
   if (!value) return null;
   const color = (kind === "urgency" ? URGENCY_COLOR : IMPORTANCE_COLOR)[value];
-  const dots = value === "high" ? 3 : value === "medium" ? 2 : 1;
+  const label = (kind === "urgency" ? URG_LABELS : IMP_LABELS)[value];
+  const isHigh = value === "high";
   return (
     <span title={`${KIND_HE[kind]}: ${LEVEL_HE[value]}`} style={{
-      display: "inline-flex", alignItems: "center", gap: 5,
-      padding: "2px 7px",
+      display: "inline-flex", alignItems: "center", gap: 4,
+      padding: "2px 8px",
       borderRadius: 999,
-      background: "transparent",
-      border: "1px solid var(--line)",
-      color: "var(--ink-3)",
-      fontSize: 10.5,
-      fontWeight: 500,
+      background: isHigh ? `${color}18` : "transparent",
+      border: `1.5px solid ${isHigh ? color : "var(--line)"}`,
+      color: isHigh ? color : "var(--ink-4)",
+      fontSize: 11, fontWeight: isHigh ? 600 : 400,
       lineHeight: 1.2,
-      letterSpacing: ".02em",
     }}>
-      <span style={{ display: "inline-flex", gap: 1.5 }}>
-        {[0,1,2].map(i => (
-          <span key={i} style={{
-            width: 4, height: 4, borderRadius: 999,
-            background: i < dots ? color : "var(--line-strong)",
-          }}/>
-        ))}
-      </span>
-      {KIND_SHORT_HE[kind]} · {LEVEL_SHORT_HE[value]}
+      <span style={{ width: 4, height: 4, borderRadius: 999, background: color, flexShrink: 0 }} />
+      {label}
     </span>
   );
 }
@@ -193,6 +186,26 @@ function AutoDirText({ children, as: Tag = "span", style, className, ...rest }) 
     </Tag>
   );
 }
+
+// Simple toast — usable from anywhere without React state
+window.showToast = (msg, type = "error") => {
+  const el = document.createElement("div");
+  const bg = type === "error" ? "#C24A2A" : "#2F5D50";
+  el.style.cssText = [
+    "position:fixed", "bottom:28px", "left:50%", "transform:translateX(-50%)",
+    `background:${bg}`, "color:white", "padding:10px 20px", "border-radius:10px",
+    "font-family:Heebo,sans-serif", "font-size:13px", "font-weight:500",
+    "box-shadow:0 4px 20px rgba(0,0,0,.25)", "z-index:9999",
+    "animation:fade-in .2s ease", "white-space:nowrap", "pointer-events:none",
+  ].join(";");
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = "opacity .3s ease";
+    el.style.opacity = "0";
+    setTimeout(() => el.remove(), 320);
+  }, 3200);
+};
 
 window.isHebrew = isHebrew;
 window.relTime = relTime;

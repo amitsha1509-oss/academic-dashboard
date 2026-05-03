@@ -17,6 +17,8 @@ function ScheduleView() {
   const [error, setError] = React.useState(null);
   const [adding, setAdding] = React.useState(null);      // category_id of group in "add pattern" mode
   const [addingCourse, setAddingCourse] = React.useState(false);
+  const [confirmingPattern, setConfirmingPattern] = React.useState(null);  // pattern id pending delete
+  const [confirmingCourse, setConfirmingCourse] = React.useState(null);    // cat id pending delete
 
   const reload = React.useCallback(async () => {
     try {
@@ -43,18 +45,24 @@ function ScheduleView() {
     try {
       await window.claudeAPI.patchPattern(id, fields);
     } catch (e) {
-      alert(t("alertSaveFailed") + ": " + e.message);
+      window.showToast(t("alertSaveFailed") + ": " + e.message);
       reload();
     }
   };
 
   const handleDelete = async (pattern) => {
-    if (!confirm(t("schConfirmDelete"))) return;
+    // First click arms confirmation; second click fires.
+    if (confirmingPattern !== pattern.id) {
+      setConfirmingPattern(pattern.id);
+      setTimeout(() => setConfirmingPattern(null), 3000);
+      return;
+    }
+    setConfirmingPattern(null);
     setPatterns(ps => ps.filter(p => p.id !== pattern.id));
     try {
       await window.claudeAPI.deletePattern(pattern.id);
     } catch (e) {
-      alert(t("alertDeleteFailed") + ": " + e.message);
+      window.showToast(t("alertDeleteFailed") + ": " + e.message);
       reload();
     }
   };
@@ -65,7 +73,7 @@ function ScheduleView() {
       setPatterns(ps => [...ps, created]);
       setAdding(null);
     } catch (e) {
-      alert(t("alertCreateFailed") + ": " + e.message);
+      window.showToast(t("alertCreateFailed") + ": " + e.message);
     }
   };
 
@@ -75,18 +83,23 @@ function ScheduleView() {
       setCategories(cs => [...cs, created].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
       setAddingCourse(false);
     } catch (e) {
-      alert(t("alertCreateFailed") + ": " + e.message);
+      window.showToast(t("alertCreateFailed") + ": " + e.message);
     }
   };
 
   const handleDeleteCourse = async (cat) => {
-    if (!confirm(`למחוק את הקורס "${cat.name}"?\nכל האירועים שלו יימחקו גם כן.`)) return;
+    if (confirmingCourse !== cat.id) {
+      setConfirmingCourse(cat.id);
+      setTimeout(() => setConfirmingCourse(null), 3000);
+      return;
+    }
+    setConfirmingCourse(null);
     try {
       await window.claudeAPI.deleteCategory(cat.id);
       setCategories(cs => cs.filter(c => c.id !== cat.id));
       setPatterns(ps => ps.filter(p => p.category_id !== cat.id));
     } catch (e) {
-      alert("מחיקה נכשלה: " + e.message);
+      window.showToast("מחיקה נכשלה: " + e.message);
       reload();
     }
   };
@@ -169,15 +182,20 @@ function ScheduleView() {
             </span>
           </>
         );
+        const isCourseConfirming = confirmingCourse === cat.id;
         const deleteBtn = (
           <button
             onClick={(e) => { e.stopPropagation(); handleDeleteCourse(cat); }}
             style={{
               padding: "3px 10px", borderRadius: 6, fontSize: 11.5,
-              border: "1px solid var(--urg-high)", background: "transparent",
-              color: "var(--urg-high)", cursor: "pointer", fontFamily: "inherit",
+              border: isCourseConfirming ? "none" : "1px solid var(--urg-high)",
+              background: isCourseConfirming ? "var(--urg-high)" : "transparent",
+              color: isCourseConfirming ? "white" : "var(--urg-high)",
+              cursor: "pointer", fontFamily: "inherit",
+              fontWeight: isCourseConfirming ? 600 : 400,
+              transition: "all .15s ease",
             }}
-          >מחק</button>
+          >{isCourseConfirming ? "בטוח?" : "מחק"}</button>
         );
         return (
           <window.CollapsibleGroup
@@ -202,6 +220,7 @@ function ScheduleView() {
                     onLocalPatch={(fields) => patchLocally(p.id, fields)}
                     onSendPatch={(fields) => sendPatch(p.id, fields)}
                     onDelete={() => handleDelete(p)}
+                    confirming={confirmingPattern === p.id}
                   />
                 ))
               )}
@@ -232,7 +251,7 @@ function ScheduleView() {
 }
 
 // ─── Single editable pattern row ──────────────────────────────────────
-function PatternRow({ pattern, onLocalPatch, onSendPatch, onDelete }) {
+function PatternRow({ pattern, onLocalPatch, onSendPatch, onDelete, confirming }) {
   const { t } = window.useLang();
   const pendingTimer = React.useRef(null);
   const pendingFields = React.useRef({});
@@ -400,11 +419,14 @@ function PatternRow({ pattern, onLocalPatch, onSendPatch, onDelete }) {
           style={{
             marginInlineStart: "auto",
             padding: "5px 12px", borderRadius: 8, fontSize: 12,
-            border: "1px solid var(--urg-high)",
-            background: "transparent", color: "var(--urg-high)",
+            border: confirming ? "none" : "1px solid var(--urg-high)",
+            background: confirming ? "var(--urg-high)" : "transparent",
+            color: confirming ? "white" : "var(--urg-high)",
             cursor: "pointer", fontFamily: "inherit",
+            fontWeight: confirming ? 600 : 400,
+            transition: "all .15s ease",
           }}
-        >{t("schDelete")}</button>
+        >{confirming ? "בטוח?" : t("schDelete")}</button>
       </div>
     </div>
   );

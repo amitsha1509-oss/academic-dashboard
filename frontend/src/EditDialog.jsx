@@ -109,8 +109,9 @@ function EditDialog({ task, onClose, onSave }) {
                 style={{
                   padding: "5px 8px", borderRadius: 8, fontSize: 12,
                   border: "none", background: "transparent", color: "var(--ink-3)",
+                  display: "inline-flex", alignItems: "center",
                 }}
-              >×</button>
+              ><X size={14} stroke={2} /></button>
             </span>
           )}
         </div>
