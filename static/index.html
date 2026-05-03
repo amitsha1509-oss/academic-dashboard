@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>לוח בקרה אקדמי</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', 'Arial Hebrew', Arial, sans-serif;
+    background: #F3F4F6;
+    color: #111827;
+    padding: 16px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 22px;
+    margin-bottom: 16px;
+    color: #1F2937;
+  }
+  .capture {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+  .capture input {
+    flex: 1;
+    padding: 14px 16px;
+    border: 2px solid #D1D5DB;
+    border-radius: 10px;
+    font-size: 16px;
+    font-family: inherit;
+    background: #FFFFFF;
+  }
+  .capture input:focus {
+    outline: none;
+    border-color: #2563EB;
+  }
+  .capture button {
+    padding: 0 24px;
+    background: #2563EB;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 18px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .capture button:disabled { background: #9CA3AF; cursor: wait; }
+  /* Importance / urgency selectors */
+  .pri-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #4B5563;
+    margin-bottom: 8px;
+  }
+  .pri-row .pri-label {
+    width: 60px;
+    flex-shrink: 0;
+    font-weight: 500;
+  }
+  .pri-row .pri-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+  .pri-row .pri-btn {
+    padding: 4px 12px;
+    border: 1.5px solid #D1D5DB;
+    background: white;
+    border-radius: 999px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .pri-row .pri-btn:hover { background: #F3F4F6; }
+  .pri-row .pri-btn.active {
+    color: white;
+    border-color: transparent;
+    font-weight: 600;
+  }
+  .pri-row .pri-btn[data-level="2"].active { background: #6B7280; }   /* gray = not important/urgent */
+  .pri-row .pri-btn[data-level="5"].active { background: #DC2626; }   /* red = important/urgent */
+  .pri-row .pri-hint {
+    font-size: 11px;
+    color: #9CA3AF;
+    font-style: italic;
+    margin-right: 4px;
+  }
+  .scope-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #D1D5DB;
+  }
+  .scope-tabs button {
+    background: none;
+    border: none;
+    padding: 8px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    color: #6B7280;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1px;
+    font-family: inherit;
+  }
+  .scope-tabs button.active {
+    color: #2563EB;
+    border-bottom-color: #2563EB;
+    font-weight: 600;
+  }
+  .empty { color: #6B7280; padding: 32px; text-align: center; }
+  .task-card {
+    background: white;
+    border-right: 4px solid var(--cat-color, #6B7280);
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .task-card.done { opacity: 0.5; }
+  .task-card.done .title { text-decoration: line-through; }
+  .task-card.overdue { background: #FEF2F2; }
+  .task-meta-col { flex: 1; min-width: 0; }
+  .task-cat {
+    font-size: 11px;
+    color: var(--cat-color, #6B7280);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .title {
+    font-size: 15px;
+    margin-bottom: 4px;
+    word-break: break-word;
+  }
+  .meta {
+    font-size: 12px;
+    color: #6B7280;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .meta .overdue-flag { color: #DC2626; font-weight: 600; }
+  .meta .no-time { color: #9CA3AF; font-size: 10px; font-style: italic; }
+  .actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .actions button {
+    background: none;
+    border: 1px solid #D1D5DB;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .actions button:hover { background: #F9FAFB; }
+  .actions button.done-btn:hover { background: #DCFCE7; border-color: #16A34A; }
+  .actions button.skip-btn:hover { background: #F3F4F6; }
+  .toast {
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    background: #1F2937;
+    color: white;
+    padding: 12px 18px;
+    border-radius: 10px;
+    font-size: 14px;
+    line-height: 1.5;
+    max-width: 420px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.25s, transform 0.25s;
+    pointer-events: none;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error {
+    background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%);
+    border-right: 4px solid #FCA5A5;
+  }
+  .toast.success {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  }
+  /* Settings panel */
+  .settings-section { margin-bottom: 20px; }
+  .settings-section h3 {
+    font-size: 14px;
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    background: var(--cat-color, #E5E7EB);
+    color: white;
+    border-radius: 6px;
+  }
+  .pattern-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #F3F4F6;
+    font-size: 13px;
+  }
+  .pattern-row:last-child { border-bottom: none; }
+  .pattern-label { flex: 1; }
+  .pattern-meta { color: #6B7280; font-size: 11px; margin-right: 6px; }
+  .pattern-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .pattern-row input[type="checkbox"] { transform: scale(1.2); cursor: pointer; }
+  .settings-help {
+    background: #FFFBEB;
+    border: 1px solid #FCD34D;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    color: #78350F;
+  }
+  /* History panel */
+  .history-week {
+    margin-bottom: 18px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #E5E7EB;
+    overflow: hidden;
+  }
+  .history-week-header {
+    background: #1F2937;
+    color: white;
+    padding: 10px 14px;
+    font-weight: 600;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .history-week-count {
+    font-weight: 400;
+    color: #D1D5DB;
+    font-size: 12px;
+  }
+  .history-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid #F3F4F6;
+    font-size: 13px;
+  }
+  .history-row:last-child { border-bottom: none; }
+  .history-icon { font-size: 16px; flex-shrink: 0; }
+  .history-cat-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .history-row .meta {
+    color: #6B7280;
+    font-size: 11px;
+    margin-right: auto;
+  }
+  .history-row.skipped { color: #9CA3AF; font-style: italic; }
+  .history-empty { padding: 32px; text-align: center; color: #6B7280; }
+  /* Review panel — set importance/urgency on auto-generated tasks per week */
+  .review-week {
+    margin-bottom: 18px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #E5E7EB;
+    overflow: hidden;
+  }
+  .review-week-header {
+    background: var(--cat-color, #1F2937);
+    color: white;
+    padding: 10px 14px;
+    font-weight: 600;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .review-row {
+    padding: 10px 14px;
+    border-bottom: 1px solid #F3F4F6;
+  }
+  .review-row:last-child { border-bottom: none; }
+  .review-row-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .review-cat-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .review-controls {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+    font-size: 12px;
+    color: #6B7280;
+  }
+  .review-controls .axis-group { display: flex; align-items: center; gap: 6px; }
+  /* Courses panel — self-confidence per category */
+  .course-card {
+    background: white;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    border-right: 4px solid var(--cat-color, #6B7280);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .course-card .course-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #1F2937;
+  }
+  .course-card .conf-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: #6B7280;
+  }
+  .conf-btn {
+    padding: 5px 12px;
+    border: 1.5px solid #D1D5DB;
+    background: white;
+    border-radius: 999px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .conf-btn:hover { background: #F9FAFB; }
+  .conf-btn.active.excellent { background: #10B981; color: white; border-color: transparent; font-weight: 600; }
+  .conf-btn.active.partial   { background: #F59E0B; color: white; border-color: transparent; font-weight: 600; }
+  .conf-btn.active.gap       { background: #DC2626; color: white; border-color: transparent; font-weight: 600; }
+  .gap-textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #D1D5DB;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+    resize: vertical;
+    min-height: 50px;
+    margin-top: 6px;
+  }
+  .gap-textarea:focus { outline: none; border-color: #2563EB; }
+  .courses-help {
+    background: #F0F9FF;
+    border: 1px solid #93C5FD;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    color: #1E3A8A;
+  }
+</style>
+</head>
+<body>
+
+<h1>לוח בקרה אקדמי</h1>
+
+<form class="capture" id="captureForm">
+  <input id="captureInput" type="text" placeholder="מה צריך לעשות? למשל: 'תרגיל הסתברות עד שלישי' או 'תור לרופא מחר ב-10'" autofocus>
+  <button type="submit" id="captureBtn">הוסף</button>
+</form>
+
+<div class="pri-row">
+  <span class="pri-label">חשיבות:</span>
+  <div class="pri-btns" id="impBtns">
+    <button class="pri-btn" data-axis="imp" data-level="5">חשוב</button>
+    <button class="pri-btn" data-axis="imp" data-level="2">לא חשוב</button>
+  </div>
+  <span class="pri-hint">(לא תבחר ⇒ ייקבע לפי הפרופיל שלך)</span>
+</div>
+<div class="pri-row">
+  <span class="pri-label">דחיפות:</span>
+  <div class="pri-btns" id="urgBtns">
+    <button class="pri-btn" data-axis="urg" data-level="5">דחוף</button>
+    <button class="pri-btn" data-axis="urg" data-level="2">לא דחוף</button>
+  </div>
+</div>
+
+<div class="scope-tabs">
+  <button data-view="today" class="active">היום</button>
+  <button data-view="week">השבוע</button>
+  <button data-view="all">הכל</button>
+  <button data-view="review">📋 סקירה</button>
+  <button data-view="courses">🎯 קורסים</button>
+  <button data-view="history">📚 היסטוריה</button>
+  <button data-view="settings" style="margin-right: auto;">⚙ הגדרות</button>
+</div>
+
+<div id="taskList"></div>
+<div id="reviewPanel" style="display:none"></div>
+<div id="coursesPanel" style="display:none"></div>
+<div id="settingsPanel" style="display:none"></div>
+<div id="historyPanel" style="display:none"></div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const API = '';  // same origin
+let categories = {};  // id -> {name, color_dark, color_mid, color_light}
+let currentView = 'today';
+
+const $ = (sel) => document.querySelector(sel);
+const list = $('#taskList');
+const settingsPanel = $('#settingsPanel');
+const reviewPanel = $('#reviewPanel');
+const coursesPanel = $('#coursesPanel');
+const historyPanel = $('#historyPanel');
+const input = $('#captureInput');
+const btn = $('#captureBtn');
+const toast = $('#toast');
+
+function showToast(msg, kind) {
+  toast.textContent = msg;
+  // kind: undefined/null = neutral, "error" = red, "success" = green
+  const cls = kind === 'error' ? ' error' : (kind === 'success' ? ' success' : '');
+  toast.className = 'toast show' + cls;
+  // Errors stay longer (5s) so user can read; otherwise 2.5s.
+  const timeout = kind === 'error' ? 5500 : 2500;
+  clearTimeout(window.__toastT);
+  window.__toastT = setTimeout(() => toast.className = 'toast', timeout);
+}
+
+function fmtDate(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  const now = new Date();
+  const diffH = (d - now) / 36e5;
+  const days = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+  const dayName = days[d.getDay()];
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const hh = d.getHours();
+  const min = d.getMinutes();
+  // Treat midnight as "no time known" — render small placeholder.
+  const hasTime = !(hh === 0 && min === 0);
+  const timeStr = hasTime
+    ? ` ${String(hh).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+    : ' <span class="no-time">ללא שעה</span>';
+  return { str: `${dayName} ${dd}/${mm}${timeStr}`, hours: diffH };
+}
+
+async function loadCategories() {
+  const r = await fetch(`${API}/categories`);
+  const list = await r.json();
+  categories = Object.fromEntries(list.map(c => [c.id, c]));
+}
+
+async function loadTasks() {
+  list.innerHTML = '<div class="empty">טוען...</div>';
+  const r = await fetch(`${API}/tasks?scope=${currentView}`);
+  if (!r.ok) {
+    list.innerHTML = `<div class="empty">שגיאה בטעינה (${r.status})</div>`;
+    return;
+  }
+  const tasks = await r.json();
+  renderTasks(tasks);
+}
+
+// ─── Review panel — set importance/urgency on upcoming auto-tasks per week ─
+async function loadReview() {
+  reviewPanel.innerHTML = '<div class="empty">טוען...</div>';
+  const r = await fetch(`${API}/tasks?scope=all`);
+  if (!r.ok) {
+    reviewPanel.innerHTML = `<div class="empty">שגיאה בטעינה (${r.status})</div>`;
+    return;
+  }
+  const tasks = await r.json();
+  // Only auto-generated recurring tasks, releasing today onwards, not done
+  const today = new Date(); today.setHours(0,0,0,0);
+  const filtered = tasks.filter(t =>
+    t.source === 'recurring' &&
+    t.release_at && new Date(t.release_at) >= today &&
+    t.status !== 'done' && t.status !== 'skipped'
+  );
+  renderReview(filtered);
+}
+
+const SEM_START = new Date('2026-04-06');
+function weekOf(iso) {
+  if (!iso) return 0;
+  return Math.floor((new Date(iso) - SEM_START) / 86400000 / 7) + 1;
+}
+
+function renderReview(tasks) {
+  if (!tasks.length) {
+    reviewPanel.innerHTML = '<div class="empty">אין משימות חדשות לסקור 🎉</div>';
+    return;
+  }
+  const byWeek = {};
+  for (const t of tasks) {
+    const w = weekOf(t.release_at);
+    (byWeek[w] = byWeek[w] || []).push(t);
+  }
+  const weeks = Object.keys(byWeek).map(Number).sort((a,b)=>a-b);
+  let html = '<div class="settings-help">בחר חשיבות/דחיפות פר-משימה. מה שלא תסמן — המערכת תנחש (לפי הקורס + ה-About Me).</div>';
+  for (const w of weeks) {
+    const ts = byWeek[w];
+    html += `<div class="review-week">
+      <div class="review-week-header"><span>שבוע ${w}</span><span style="color:#D1D5DB; font-weight:400">${ts.length} משימות</span></div>`;
+    for (const t of ts) {
+      const cat = categories[t.category_id] || {};
+      const color = '#' + (cat.color_dark || '6B7280');
+      html += `<div class="review-row">
+        <div class="review-row-title">
+          <span class="review-cat-dot" style="background:${color}"></span>
+          <strong>${escapeHtml(t.category_name)}</strong>
+          <span style="color:#6B7280; font-size:12px;">${escapeHtml(t.title)}</span>
+        </div>
+        <div class="review-controls">
+          <span class="axis-group">חשיבות:
+            ${[5,2].map(lv => `<button class="pri-btn${t.importance>=4&&lv===5?' active':t.importance<=2&&lv===2?' active':''}" data-task-id="${t.id}" data-axis="imp" data-level="${lv}">${impLabel(lv)}</button>`).join('')}
+          </span>
+          <span class="axis-group">דחיפות:
+            ${[5,2].map(lv => `<button class="pri-btn${t.urgency>=4&&lv===5?' active':t.urgency<=2&&lv===2?' active':''}" data-task-id="${t.id}" data-axis="urg" data-level="${lv}">${urgLabel(lv)}</button>`).join('')}
+          </span>
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+  reviewPanel.innerHTML = html;
+}
+
+function impLabel(lv) { return lv === 5 ? 'חשוב' : 'לא חשוב'; }
+function urgLabel(lv) { return lv === 5 ? 'דחוף' : 'לא דחוף'; }
+
+reviewPanel.addEventListener('click', async (e) => {
+  const b = e.target.closest('button.pri-btn[data-task-id]');
+  if (!b) return;
+  const taskId = b.dataset.taskId;
+  const axis = b.dataset.axis;
+  const level = parseInt(b.dataset.level, 10);
+  const sibs = reviewPanel.querySelectorAll(`button[data-task-id="${taskId}"][data-axis="${axis}"]`);
+  sibs.forEach(s => s.classList.remove('active'));
+  b.classList.add('active');
+  const field = axis === 'imp' ? 'importance' : 'urgency';
+  try {
+    const r = await fetch(`${API}/tasks/${encodeURIComponent(taskId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: level }),
+    });
+    if (!r.ok) throw new Error(`${r.status}`);
+    showToast(`✓ עודכן ${axis === 'imp' ? 'חשיבות' : 'דחיפות'}`, 'success');
+  } catch (err) {
+    showToast('שגיאה: ' + err.message, 'error');
+  }
+});
+
+// ─── Courses panel — self-confidence + gap notes per category ─────
+async function loadCourses() {
+  coursesPanel.innerHTML = '<div class="empty">טוען...</div>';
+  const r = await fetch(`${API}/categories`);
+  if (!r.ok) {
+    coursesPanel.innerHTML = `<div class="empty">שגיאה (${r.status})</div>`;
+    return;
+  }
+  const cats = await r.json();
+  // Sort by sort_order; skip the synthetic "כללי" category for the courses view
+  const courses = cats.filter(c => c.name !== 'כללי')
+                       .sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
+  let html = `<div class="courses-help">📈 דרג כל קורס לפי איך אתה מרגיש איתו. במשבצת תוכל להרחיב על פערים ספציפיים. המידע נשמר אוטומטית.</div>`;
+  for (const c of courses) {
+    const color = '#' + (c.color_dark || '6B7280');
+    const conf = c.self_confidence || '';
+    html += `<div class="course-card" style="--cat-color: ${color}">
+      <div class="course-title">${escapeHtml(c.name)}</div>
+      <div class="conf-row">
+        <span>איך אני מרגיש:</span>
+        <button class="conf-btn excellent ${conf==='excellent'?'active':''}" data-cat-id="${c.id}" data-conf="excellent">😎 מרגיש מעולה</button>
+        <button class="conf-btn partial   ${conf==='partial'  ?'active':''}" data-cat-id="${c.id}" data-conf="partial">🤔 בערך על החומר</button>
+        <button class="conf-btn gap       ${conf==='gap'      ?'active':''}" data-cat-id="${c.id}" data-conf="gap">😰 פער גדול</button>
+      </div>
+      <textarea class="gap-textarea" data-cat-id="${c.id}" placeholder="פערים ספציפיים, נושאים שצריך לחזור עליהם, וכל מה שעוזר לך לזכור..." >${escapeHtml(c.gap_notes || '')}</textarea>
+    </div>`;
+  }
+  coursesPanel.innerHTML = html;
+}
+
+coursesPanel.addEventListener('click', async (e) => {
+  const b = e.target.closest('button.conf-btn[data-cat-id]');
+  if (!b) return;
+  const catId = b.dataset.catId;
+  const conf = b.dataset.conf;
+  const sibs = coursesPanel.querySelectorAll(`button[data-cat-id="${catId}"]`);
+  const wasActive = b.classList.contains('active');
+  sibs.forEach(s => s.classList.remove('active'));
+  if (!wasActive) b.classList.add('active');
+  const newVal = wasActive ? null : conf;
+  try {
+    const r = await fetch(`${API}/categories/${catId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ self_confidence: newVal }),
+    });
+    if (!r.ok) throw new Error(`${r.status}`);
+    showToast('✓ נשמר', 'success');
+  } catch (err) {
+    showToast('שגיאה: ' + err.message, 'error');
+  }
+});
+
+// Save gap_notes — debounced 1s after typing stops, AND on tab switch (capture-phase blur).
+const _gapNoteTimers = new Map();
+function _saveGapNotes(catId, text, immediate) {
+  if (_gapNoteTimers.has(catId)) clearTimeout(_gapNoteTimers.get(catId));
+  const fire = async () => {
+    try {
+      await fetch(`${API}/categories/${catId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gap_notes: text }),
+      });
+      showToast('✓ הערות נשמרו', 'success');
+    } catch (err) { /* silent */ }
+  };
+  if (immediate) { fire(); return; }
+  _gapNoteTimers.set(catId, setTimeout(fire, 1000));
+}
+coursesPanel.addEventListener('input', (e) => {
+  const ta = e.target.closest('textarea.gap-textarea[data-cat-id]');
+  if (!ta) return;
+  _saveGapNotes(ta.dataset.catId, ta.value, false);
+});
+coursesPanel.addEventListener('blur', (e) => {
+  const ta = e.target.closest('textarea.gap-textarea[data-cat-id]');
+  if (!ta) return;
+  _saveGapNotes(ta.dataset.catId, ta.value, true);
+}, true);  // capture phase, since blur doesn't bubble
+
+async function loadHistory() {
+  historyPanel.innerHTML = '<div class="history-empty">טוען היסטוריה...</div>';
+  const r = await fetch(`${API}/history`);
+  if (!r.ok) {
+    historyPanel.innerHTML = `<div class="history-empty">שגיאה בטעינה (${r.status})</div>`;
+    return;
+  }
+  const items = await r.json();
+  renderHistory(items);
+}
+
+function renderHistory(items) {
+  if (!items.length) {
+    historyPanel.innerHTML = '<div class="history-empty">עוד לא סימנת משימות כהושלמו. ✓ בעמודת "היום" יישמר כאן.</div>';
+    return;
+  }
+  // Group by week
+  const byWeek = {};
+  for (const t of items) {
+    const w = t.week || 0;
+    (byWeek[w] = byWeek[w] || []).push(t);
+  }
+  const weeks = Object.keys(byWeek).map(Number).sort((a, b) => b - a);
+  let html = '';
+  for (const w of weeks) {
+    const ts = byWeek[w];
+    const doneN = ts.filter(t => t.status === 'done').length;
+    const skipN = ts.filter(t => t.status === 'skipped').length;
+    html += `<div class="history-week">
+      <div class="history-week-header">
+        <span>שבוע ${w}</span>
+        <span class="history-week-count">${doneN} בוצעו${skipN ? ` · ${skipN} דולגו` : ''}</span>
+      </div>`;
+    for (const t of ts) {
+      const icon = t.status === 'done' ? '✅' : '⏭';
+      const cls = t.status === 'skipped' ? ' skipped' : '';
+      html += `<div class="history-row${cls}">
+        <span class="history-icon">${icon}</span>
+        <span class="history-cat-dot" style="background: #${t.color || '6B7280'}"></span>
+        <span><strong>${escapeHtml(t.category_name)}</strong> · ${escapeHtml(t.title)}</span>
+        <span class="meta">${formatHistoryDate(t.date)} · ${kindHe(t.kind)}</span>
+      </div>`;
+    }
+    html += '</div>';
+  }
+  historyPanel.innerHTML = html;
+}
+
+function formatHistoryDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const days = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
+  return `${days[d.getDay()]} ${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+async function loadSettings() {
+  settingsPanel.innerHTML = '<div class="empty">טוען הגדרות...</div>';
+  const r = await fetch(`${API}/patterns`);
+  if (!r.ok) {
+    settingsPanel.innerHTML = `<div class="empty">שגיאה (${r.status})</div>`;
+    return;
+  }
+  const patterns = await r.json();
+  renderSettings(patterns);
+}
+
+function kindHe(k) {
+  return { lecture: 'הרצאה', tutorial: 'תרגול', hw: 'תרגיל בית', reading: 'קריאה' }[k] || k;
+}
+
+function renderSettings(patterns) {
+  let html = `
+    <div class="settings-help">
+      💡 <strong>חובה לסיים</strong> = המשימה תישאר ברשימת "היום" עד שתסמן ✓ (לא נעלמת אוטומטית).<br>
+      ברירת מחדל: תרגילים וקריאות → חובה. הרצאות ותרגולים → אינפורמטיבי בלבד.<br>
+      שנה כאן את מה שצריך: למשל אם הרצאת חדווא חייבת להישאר עד שתשלים אותה.
+    </div>
+  `;
+  // Group by category
+  const byCat = {};
+  for (const p of patterns) {
+    (byCat[p.category_id] = byCat[p.category_id] || []).push(p);
+  }
+  for (const catId of Object.keys(byCat).sort((a, b) => {
+    const sa = (categories[a] || {}).sort_order || 99;
+    const sb = (categories[b] || {}).sort_order || 99;
+    return sa - sb;
+  })) {
+    const cat = categories[catId] || {};
+    const ps = byCat[catId];
+    const color = '#' + (cat.color_dark || '6B7280');
+    html += `<div class="settings-section">
+      <h3 style="--cat-color: ${color}; background: ${color};">${cat.name || catId}</h3>`;
+    for (const p of ps) {
+      const meta = [];
+      if (p.day_of_week) meta.push(`${dayHe(p.day_of_week)} ${p.start_time || ''}${p.end_time ? '–' + p.end_time : ''}`);
+      if (p.hw_release_day) meta.push(`עולה: ${dayHe(p.hw_release_day)} ${p.hw_release_time || ''}`);
+      html += `
+        <div class="pattern-row">
+          <div class="pattern-label">
+            <strong>${kindHe(p.kind)}</strong> — ${escapeHtml(p.label || '')}
+            <div class="pattern-meta">${meta.join(' · ')}</div>
+          </div>
+          <label>
+            <input type="checkbox" data-pattern-id="${p.id}" ${p.is_required ? 'checked' : ''}>
+            חובה לסיים
+          </label>
+        </div>`;
+    }
+    html += '</div>';
+  }
+  settingsPanel.innerHTML = html;
+}
+
+function dayHe(d) {
+  return { Sun: 'יום א׳', Mon: 'יום ב׳', Tue: 'יום ג׳', Wed: 'יום ד׳', Thu: 'יום ה׳', Fri: 'יום ו׳', Sat: 'יום ש׳' }[d] || d;
+}
+
+settingsPanel.addEventListener('change', async (e) => {
+  const cb = e.target;
+  if (!cb.matches('input[type="checkbox"][data-pattern-id]')) return;
+  const id = cb.dataset.patternId;
+  cb.disabled = true;
+  try {
+    const r = await fetch(`${API}/patterns/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_required: cb.checked }),
+    });
+    if (!r.ok) throw new Error(`${r.status}`);
+    showToast(cb.checked ? '✓ סומן כחובה' : '✓ הוסר מחובה');
+  } catch (err) {
+    showToast('שגיאה: ' + err.message, 'error');
+    cb.checked = !cb.checked;
+  } finally {
+    cb.disabled = false;
+  }
+});
+
+function renderTasks(tasks) {
+  if (!tasks.length) {
+    list.innerHTML = '<div class="empty">✨ אין משימות פתוחות</div>';
+    return;
+  }
+  list.innerHTML = '';
+  for (const t of tasks) {
+    const cat = categories[t.category_id] || {};
+    const due = fmtDate(t.due_at);
+    const isOverdue = due && due.hours < 0 && t.status !== 'done' && t.status !== 'skipped';
+    const card = document.createElement('div');
+    card.className = 'task-card' + (t.status === 'done' ? ' done' : '') + (isOverdue ? ' overdue' : '');
+    card.style.setProperty('--cat-color', '#' + (cat.color_dark || '6B7280'));
+
+    const metaParts = [];
+    if (due) {
+      const flag = isOverdue ? `<span class="overdue-flag">⚠ באיחור: ${due.str}</span>` : `דדליין: ${due.str}`;
+      metaParts.push(flag);
+    }
+    if (t.type) metaParts.push(`סוג: ${typeHe(t.type)}`);
+    if (t.place) metaParts.push(`מקום: ${placeHe(t.place)}`);
+
+    card.innerHTML = `
+      <div class="task-meta-col">
+        <div class="task-cat">${escapeHtml(t.category_name)}</div>
+        <div class="title">${escapeHtml(t.title)}</div>
+        <div class="meta">${metaParts.join(' • ')}</div>
+      </div>
+      <div class="actions">
+        <button class="done-btn" data-id="${t.id}" data-action="done" title="סמן כבוצע">✓</button>
+        <button class="skip-btn" data-id="${t.id}" data-action="skipped" title="דלג">⏭</button>
+      </div>
+    `;
+    list.appendChild(card);
+  }
+}
+
+function typeHe(t) {
+  return { lecture: 'הרצאה', tutorial: 'תרגול', hw: 'תרגיל', reading: 'קריאה', adhoc: '' }[t] || t;
+}
+function placeHe(p) {
+  return { home: 'בית', university: 'אוניברסיטה', library: 'ספרייה', cafe: 'קפה', other: 'אחר' }[p] || p;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+}
+
+list.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const action = btn.dataset.action;
+  btn.disabled = true;
+  try {
+    const r = await fetch(`${API}/tasks/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: action }),
+    });
+    if (!r.ok) throw new Error(`${r.status}`);
+    showToast(action === 'done' ? '✓ סומן כבוצע' : '⏭ דולג');
+    await loadTasks();
+  } catch (err) {
+    showToast('שגיאה: ' + err.message, 'error');
+    btn.disabled = false;
+  }
+});
+
+document.querySelector('.scope-tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-view]');
+  if (!btn) return;
+  document.querySelectorAll('.scope-tabs button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentView = btn.dataset.view;
+  list.style.display = 'none';
+  settingsPanel.style.display = 'none';
+  historyPanel.style.display = 'none';
+  reviewPanel.style.display = 'none';
+  coursesPanel.style.display = 'none';
+  if (currentView === 'settings') {
+    settingsPanel.style.display = 'block';
+    loadSettings();
+  } else if (currentView === 'history') {
+    historyPanel.style.display = 'block';
+    loadHistory();
+  } else if (currentView === 'review') {
+    reviewPanel.style.display = 'block';
+    loadReview();
+  } else if (currentView === 'courses') {
+    coursesPanel.style.display = 'block';
+    loadCourses();
+  } else {
+    list.style.display = 'block';
+    loadTasks();
+  }
+});
+
+// Importance/urgency selectors — user can pick to override AI/code defaults.
+let pickedImp = null;
+let pickedUrg = null;
+document.querySelectorAll('.pri-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    const axis = b.dataset.axis;
+    const level = parseInt(b.dataset.level, 10);
+    const siblings = document.querySelectorAll(`.pri-btn[data-axis="${axis}"]`);
+    const wasActive = b.classList.contains('active');
+    siblings.forEach(s => s.classList.remove('active'));
+    if (!wasActive) {
+      b.classList.add('active');
+      if (axis === 'imp') pickedImp = level;
+      else pickedUrg = level;
+    } else {
+      // Toggle off → reset to "let system decide"
+      if (axis === 'imp') pickedImp = null;
+      else pickedUrg = null;
+    }
+  });
+});
+
+$('#captureForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    const clientNow = new Date().toISOString().replace('Z', '+03:00');  // Israel TZ hint
+    const body = { text, client_now: clientNow };
+    if (pickedImp != null) body.importance = pickedImp;
+    if (pickedUrg != null) body.urgency = pickedUrg;
+    const r = await fetch(`${API}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `${r.status}`);
+    }
+    const created = await r.json();
+    input.value = '';
+    // Reset importance/urgency selections after submit
+    document.querySelectorAll('.pri-btn.active').forEach(b => b.classList.remove('active'));
+    pickedImp = null;
+    pickedUrg = null;
+    showToast(`נוסף: ${created.title} → ${created.category_name}`);
+    await loadTasks();
+  } catch (err) {
+    showToast('שגיאה: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'הוסף';
+  }
+});
+
+(async () => {
+  await loadCategories();
+  await loadTasks();
+})();
+</script>
+
+</body>
+</html>
