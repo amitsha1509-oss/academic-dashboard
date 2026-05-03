@@ -85,6 +85,43 @@ def _normalize(text: str) -> str:
     return text.lower().strip()
 
 
+def _levenshtein(a: str, b: str) -> int:
+    if a == b:
+        return 0
+    if len(a) < len(b):
+        a, b = b, a
+    row = list(range(len(b) + 1))
+    for ca in a:
+        new_row = [row[0] + 1]
+        for j, cb in enumerate(b):
+            new_row.append(min(row[j] + (0 if ca == cb else 1),
+                               new_row[-1] + 1, row[j + 1] + 1))
+        row = new_row
+    return row[-1]
+
+
+def _fuzzy_course_hit(text: str, keywords: dict) -> bool:
+    """Return True if any word in text is within edit-distance 1 of any
+    word in a course NAME (not keyword phrases — phrase fragments like 'קור'
+    from splitting 'קור'אן' cause false positives).
+    Used to catch typos before committing to 'כללי'."""
+    input_words = [w for w in re.findall(r'\w+', _normalize(text)) if len(w) >= 2]
+    if not input_words:
+        return False
+
+    ref_words: set[str] = set()
+    for course_name in keywords:
+        for w in re.findall(r'\w+', _normalize(course_name)):
+            if len(w) >= 2:
+                ref_words.add(w)
+
+    for iw in input_words:
+        for rw in ref_words:
+            if _levenshtein(iw, rw) <= 1:
+                return True
+    return False
+
+
 def _find_categories(text: str, keywords: dict) -> list[str]:
     """Return all categories whose keywords appear in text."""
     t = _normalize(text)
@@ -125,8 +162,10 @@ def classify(text: str, user_keywords: Optional[dict] = None) -> Optional[str]:
     has_ambig = _has_ambiguous_word(text)
 
     if len(matches) == 0:
-        # No course keyword. If ambiguous standalone word, lean general.
-        # E.g. "תור לרופא" → general. "אימון ריצה" → general.
+        # Before committing to כללי, check for near-miss (typo).
+        # "דתס" is edit-distance 1 from "דת" (word in "דת האסלאם") → AI decides.
+        if _fuzzy_course_hit(text, effective_keywords):
+            return None
         return "כללי"
 
     if len(matches) == 1:

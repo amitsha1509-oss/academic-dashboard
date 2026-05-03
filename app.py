@@ -141,7 +141,7 @@ def healthz() -> dict:
 # ─── Categories ─────────────────────────────────────────────────────
 _CATEGORY_FIELDS = {
     "name", "department", "mandatory", "color_dark", "color_mid", "color_light",
-    "sort_order", "self_confidence", "gap_notes",
+    "sort_order", "self_confidence", "gap_notes", "keywords",
     # default_importance/default_urgency are set by the AI re-rank in PUT /context,
     # not via PATCH /categories. Excluding them here is intentional.
 }
@@ -186,9 +186,10 @@ def create_category(
     # handle it immediately. Non-fatal: if Gemini is unavailable the course
     # still works, just uses AI for every task until keywords are populated.
     kw_str = classifier.generate_keywords(payload.name)
-    if kw_str:
-        with db.connect() as c:
-            c.execute("UPDATE categories SET keywords=? WHERE id=?", (kw_str, cat_id))
+    # Always include the course name itself so keyword classifier matches immediately.
+    kw_str = f"{payload.name},{kw_str}" if kw_str else payload.name
+    with db.connect() as c:
+        c.execute("UPDATE categories SET keywords=? WHERE id=?", (kw_str, cat_id))
 
     return models.Category.model_validate(dict(row))
 

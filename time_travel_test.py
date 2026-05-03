@@ -18,7 +18,7 @@ def show(label: str, now: datetime, scope: str = "today"):
     print("=" * 80)
     print(f"{label}    now = {now.strftime('%a %d/%m %H:%M')}    scope = {scope}")
     print("=" * 80)
-    tasks = compute.compute_tasks(now, scope=scope)
+    tasks = compute.compute_tasks(now, scope=scope, user_id=1)
     if not tasks:
         print("  (אין משימות)")
         return

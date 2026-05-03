@@ -36,6 +36,7 @@ class Category(BaseModel):
     default_urgency: Optional[int] = None
     self_confidence: Optional[Literal["excellent", "partial", "gap"]] = None
     gap_notes: Optional[str] = None
+    keywords: Optional[str] = None
 
 
 class CategoryCreate(BaseModel):
@@ -59,6 +60,7 @@ class CategoryUpdate(BaseModel):
     sort_order: Optional[int] = None
     self_confidence: Optional[Literal["excellent", "partial", "gap"]] = None
     gap_notes: Optional[str] = None
+    keywords: Optional[str] = None
 
 
 PatternKind = Literal["lecture", "tutorial", "hw", "reading"]

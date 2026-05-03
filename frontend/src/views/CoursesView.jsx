@@ -170,12 +170,41 @@ function GroupToggle({ value, onChange }) {
 
 function CourseCard({ cat, onPatch, saving }) {
   const [notes, setNotes] = useState(cat.gap_notes || "");
+  const [showKw, setShowKw] = useState(false);
+  const [kwList, setKwList] = useState(
+    (cat.keywords || "").split(",").map(k => k.trim()).filter(Boolean)
+  );
+  const [newKw, setNewKw] = useState("");
   // Direct save state — bypasses onPatch indirection so unmount cleanup
   // doesn't depend on parent component still being alive.
   const pendingTimer = React.useRef(null);
   const latestNotes = React.useRef(notes);
   const color = "#" + (cat.color_dark || "6B7280");
   const conf = cat.self_confidence;
+
+  const saveKeywords = (list) => {
+    fetch(`${_CATAPI}/categories/${cat.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keywords: list.join(",") }),
+      keepalive: true,
+    }).catch(() => {});
+  };
+
+  const removeKw = (kw) => {
+    const next = kwList.filter(k => k !== kw);
+    setKwList(next);
+    saveKeywords(next);
+  };
+
+  const addKw = () => {
+    const v = newKw.trim();
+    if (!v || kwList.includes(v)) { setNewKw(""); return; }
+    const next = [...kwList, v];
+    setKwList(next);
+    setNewKw("");
+    saveKeywords(next);
+  };
 
   const saveNow = (text) => {
     fetch(`${_CATAPI}/categories/${cat.id}`, {
@@ -299,6 +328,77 @@ function CourseCard({ cat, onPatch, saving }) {
         }}
       />
       {saving && <div style={{ fontSize: 11, color: "var(--ink-4)", marginTop: 4, fontStyle: "italic" }}>שומר...</div>}
+
+      {/* Keywords section — hidden by default */}
+      <div style={{ marginTop: 10 }}>
+        <button
+          onClick={() => setShowKw(s => !s)}
+          style={{
+            background: "none", border: "none", padding: 0,
+            fontSize: 11.5, color: "var(--ink-4)", cursor: "pointer",
+            fontFamily: "inherit", display: "flex", alignItems: "center", gap: 4,
+          }}
+        >
+          <span style={{ fontSize: 10 }}>{showKw ? "▾" : "▸"}</span>
+          מילות מפתח ({kwList.length})
+        </button>
+
+        {showKw && (
+          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+              {kwList.map(kw => (
+                <span key={kw} style={{
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  padding: "3px 9px", borderRadius: 999,
+                  background: "var(--paper-2)", border: "1px solid var(--line-strong)",
+                  fontSize: 12, color: "var(--ink-2)",
+                  fontFamily: "var(--font-mono)",
+                }}>
+                  {kw}
+                  <button
+                    onClick={() => removeKw(kw)}
+                    style={{
+                      background: "none", border: "none", padding: "0 0 0 2px",
+                      cursor: "pointer", color: "var(--ink-4)", fontSize: 13,
+                      lineHeight: 1, display: "flex", alignItems: "center",
+                    }}
+                    title="מחק מילת מפתח"
+                  >×</button>
+                </span>
+              ))}
+              {kwList.length === 0 && (
+                <span style={{ fontSize: 12, color: "var(--ink-4)", fontStyle: "italic" }}>אין מילות מפתח</span>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                value={newKw}
+                onChange={e => setNewKw(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addKw(); else if (e.key === "Escape") setNewKw(""); }}
+                placeholder="הוסף מילת מפתח..."
+                style={{
+                  padding: "4px 10px", borderRadius: 8, fontSize: 12.5,
+                  border: "1px solid var(--line-strong)", background: "var(--paper)",
+                  color: "var(--ink)", outline: "none", fontFamily: "var(--font-mono)",
+                  width: 160,
+                }}
+              />
+              <button
+                onClick={addKw}
+                disabled={!newKw.trim()}
+                style={{
+                  padding: "4px 12px", borderRadius: 8, fontSize: 12,
+                  border: "none",
+                  background: newKw.trim() ? "var(--ink)" : "var(--paper-3)",
+                  color: newKw.trim() ? "var(--paper)" : "var(--ink-4)",
+                  fontWeight: 600, cursor: newKw.trim() ? "pointer" : "default",
+                  fontFamily: "inherit",
+                }}
+              >הוסף</button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

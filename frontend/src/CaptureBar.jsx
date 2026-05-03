@@ -245,24 +245,25 @@ function CaptureBar({ onCreate, onStartManual, classifying, seedRef }) {
         <div style={{
           padding: "0 18px 12px",
           display: "flex",
-          gap: 14,
-          flexWrap: "wrap",
-          alignItems: "center",
+          flexDirection: "column",
+          gap: 6,
           fontSize: 12,
           color: "var(--ink-3)",
         }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            חשיבות:
-            <PriBtn axis="imp" level={5} label="חשוב" />
-            <PriBtn axis="imp" level={2} label="לא חשוב" />
-          </span>
-          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            דחיפות:
-            <PriBtn axis="urg" level={5} label="דחוף" />
-            <PriBtn axis="urg" level={2} label="לא דחוף" />
-          </span>
+          <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "nowrap" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+              חשיבות:
+              <PriBtn axis="imp" level={5} label="חשוב" />
+              <PriBtn axis="imp" level={2} label="לא חשוב" />
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+              דחיפות:
+              <PriBtn axis="urg" level={5} label="דחוף" />
+              <PriBtn axis="urg" level={2} label="לא דחוף" />
+            </span>
+          </div>
           <span style={{ color: "var(--ink-4)", fontStyle: "italic", fontSize: 11 }}>
-            (לא תבחר ⇒ ייקבע לפי הפרופיל שלך)
+            לא תבחר ⇒ ייקבע לפי הפרופיל שלך
           </span>
         </div>
 
