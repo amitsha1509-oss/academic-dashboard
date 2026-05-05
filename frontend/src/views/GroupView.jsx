@@ -26,13 +26,13 @@ function GroupView({ tasks, groupBy, ...rest }) {
         const isSubject = groupBy === "subject";
         const meta = isSubject ? window.SUBJECT_META[key] : window.CONTEXT_META[key];
         const Ico = window.Icon[meta?.icon || "Folder"];
-        const accent = isSubject ? meta.color : "var(--ink-3)";
+        const accent = isSubject ? (meta?.color || "var(--ink-3)") : "var(--ink-3)";
         const header = (
           <>
             <span style={{
               display: "inline-flex", alignItems: "center", justifyContent: "center",
               width: 22, height: 22, borderRadius: 7,
-              background: isSubject ? meta.color : "var(--paper-3)",
+              background: isSubject ? (meta?.color || "var(--paper-3)") : "var(--paper-3)",
               color: isSubject ? "var(--paper)" : "var(--ink-2)",
               flexShrink: 0,
             }}>

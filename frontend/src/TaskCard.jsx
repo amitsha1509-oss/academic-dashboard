@@ -7,7 +7,7 @@ function TaskCard({ task, onToggleDone, onDelete, onEdit, onToggleStep, onDismis
   const done = task.status === "done";
   const fading = !!fadingIds?.[task.id];
   const rtl = window.isHebrew(task.raw_text);
-  const urgColor = window.URGENCY_COLOR[task.urgency];
+  const urgColor = window.URGENCY_COLOR[task.urgency] || "transparent";
   const compact = density === "compact";
 
   const Check = window.Icon.Check;
@@ -145,7 +145,7 @@ function TaskCard({ task, onToggleDone, onDelete, onEdit, onToggleStep, onDismis
 
               {stepsOpen && (
                 <div style={{
-                  padding: "2px 12px 10px",
+                  padding: "8px 12px 10px",
                   display: "flex", flexDirection: "column", gap: 4,
                   borderTop: "1px solid var(--line)",
                   animation: "fade-in .2s ease",

@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: academic-dashboard
+    env: python
+    plan: starter
+    pythonVersion: "3.10"
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    disk:
+      name: academic-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DB_PATH
+        value: /var/data/academic.sqlite3
+      - key: DEV_MODE
+        value: "0"
+      - key: BASE_URL
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false

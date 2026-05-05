@@ -21,6 +21,7 @@ const _CATAPI = window.location.origin.startsWith("http://localhost")
 function CoursesView() {
   const { t } = window.useLang();
   const [cats, setCats] = useState([]);
+  console.log("CoursesView v3 loaded");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
   const [groupBy, setGroupBy] = useState("default"); // "default" | "feel"
@@ -187,6 +188,7 @@ function CourseCard({ cat, onPatch, saving }) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ keywords: list.join(",") }),
+      credentials: "include",
       keepalive: true,
     }).catch(() => {});
   };
@@ -334,9 +336,9 @@ function CourseCard({ cat, onPatch, saving }) {
         <button
           onClick={() => setShowKw(s => !s)}
           style={{
-            background: "none", border: "none", padding: 0,
-            fontSize: 11.5, color: "var(--ink-4)", cursor: "pointer",
-            fontFamily: "inherit", display: "flex", alignItems: "center", gap: 4,
+            background: "none", border: "1px solid var(--line-strong)", padding: "4px 10px",
+            borderRadius: 8, fontSize: 12, color: "var(--ink-3)", cursor: "pointer",
+            fontFamily: "inherit", display: "flex", alignItems: "center", gap: 5,
           }}
         >
           <span style={{ fontSize: 10 }}>{showKw ? "▾" : "▸"}</span>
@@ -366,7 +368,7 @@ function CourseCard({ cat, onPatch, saving }) {
                   >×</button>
                 </span>
               ))}
-              {kwList.length === 0 && (
+              {kwList.length === 0 && showKw && (
                 <span style={{ fontSize: 12, color: "var(--ink-4)", fontStyle: "italic" }}>אין מילות מפתח</span>
               )}
             </div>

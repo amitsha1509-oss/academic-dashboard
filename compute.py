@@ -123,7 +123,10 @@ def _to_dt(s) -> Optional[datetime]:
     if isinstance(s, datetime):
         dt = s
     else:
-        dt = datetime.fromisoformat(s)
+        try:
+            dt = datetime.fromisoformat(s)
+        except (ValueError, TypeError):
+            return None
     return dt.replace(tzinfo=None) if dt.tzinfo else dt
 
 

@@ -2,6 +2,9 @@
 
 const { useState: useStateH, useEffect: useEffectH } = React;
 
+const _HIST_BASE = window.location.origin.startsWith("http://localhost")
+  ? "http://localhost:8001" : "";
+
 function HistoryView() {
   const [items, setItems] = useStateH([]);
   const [loading, setLoading] = useStateH(true);
@@ -9,7 +12,7 @@ function HistoryView() {
   useEffectH(() => {
     (async () => {
       try {
-        const r = await fetch("http://localhost:8001/history");
+        const r = await fetch(`${_HIST_BASE}/history`, { credentials: "include" });
         setItems(await r.json());
       } finally { setLoading(false); }
     })();

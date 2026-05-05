@@ -9,10 +9,12 @@ Per BUILDING_PRINCIPLES.md "Modular architecture":
 
 Run: uvicorn app:app --reload --port 8001
 """
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional
 
+from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,6 +64,23 @@ app.add_middleware(
 
 # Initialize DB on startup (idempotent)
 db.init_db()
+
+
+# ─── Daily backup ───────────────────────────────────────────────────
+def _backup_db():
+    if not db.DB_PATH.exists():
+        return
+    backup_dir = db.DB_PATH.parent / "backups"
+    backup_dir.mkdir(exist_ok=True)
+    name = f"academic-{datetime.now().strftime('%Y-%m-%d')}.sqlite3"
+    shutil.copy2(db.DB_PATH, backup_dir / name)
+    for old in sorted(backup_dir.glob("academic-*.sqlite3"))[:-7]:
+        old.unlink()
+    print(f"[backup] saved {name}")
+
+_scheduler = BackgroundScheduler()
+_scheduler.add_job(_backup_db, "interval", hours=24, next_run_time=datetime.now())
+_scheduler.start()
 
 
 # ─── Auth routes (no get_current_user dependency — these ARE auth) ──
@@ -812,6 +831,42 @@ def submit_feedback(
             (user.id, text, page),
         )
     return {"id": cur.lastrowid, "ok": True}
+
+
+@app.get("/admin/db-backup")
+def admin_db_backup(user: auth.User = Depends(auth.get_current_user)):
+    from fastapi.responses import FileResponse
+    if user.id != ADMIN_USER_ID:
+        raise HTTPException(403, "admin only")
+    filename = f"academic-backup-{datetime.now().strftime('%Y%m%d-%H%M')}.sqlite3"
+    return FileResponse(path=str(db.DB_PATH), filename=filename, media_type="application/octet-stream")
+
+
+@app.get("/admin/backups")
+def admin_list_backups(user: auth.User = Depends(auth.get_current_user)):
+    if user.id != ADMIN_USER_ID:
+        raise HTTPException(403, "admin only")
+    backup_dir = db.DB_PATH.parent / "backups"
+    if not backup_dir.exists():
+        return []
+    files = sorted(backup_dir.glob("academic-*.sqlite3"), reverse=True)
+    return [{"name": f.name, "size_kb": round(f.stat().st_size / 1024)} for f in files]
+
+
+@app.get("/admin/backups/{filename}")
+def admin_download_backup(
+    filename: str,
+    user: auth.User = Depends(auth.get_current_user),
+):
+    from fastapi.responses import FileResponse
+    if user.id != ADMIN_USER_ID:
+        raise HTTPException(403, "admin only")
+    if "/" in filename or "\\" in filename or not filename.endswith(".sqlite3"):
+        raise HTTPException(400, "invalid filename")
+    path = db.DB_PATH.parent / "backups" / filename
+    if not path.exists():
+        raise HTTPException(404, "backup not found")
+    return FileResponse(path=str(path), filename=filename, media_type="application/octet-stream")
 
 
 @app.get("/admin/feedback")

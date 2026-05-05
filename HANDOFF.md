@@ -379,3 +379,316 @@ Then restart with the standard command (§5).
 - `frontend/src/App.jsx` — `+FeedbackButton` component, mounted next to `TweaksHost`.
 
 End of session 5 handoff.
+
+---
+
+## 12. Session 6 — what changed (2026-05-04)
+
+### Vite frontend migration — COMPLETE
+
+The old frontend (`frontend/`) served static files from FastAPI with no build step, no HMR, and aggressive browser caching that made changes invisible even in incognito mode. The fix was a full migration to a proper build tool.
+
+**New frontend lives at:** `frontend-vite/`
+**Dev server:** `cd frontend-vite && npm run dev` → **http://localhost:5173**
+**The old `/app/` endpoint is deprecated.** Use `:5173` for dev going forward.
+
+#### Stack
+- **Vite** (build tool + dev server with HMR — changes appear instantly, zero cache issues)
+- **React + TypeScript** (strict typed)
+- **Tailwind CSS v4** (CSS-first, `@import "tailwindcss"` in `index.css`, no `tailwind.config.js`)
+- **shadcn/ui v4** (component library — button, card, badge, input, textarea, dialog, tabs, sonner)
+- **Sonner** (toast notifications — replaces the old custom toast)
+- **Lucide React** (icons)
+
+#### All components written this session
+
+| File | Description |
+|------|-------------|
+| `src/App.tsx` | Bootstrap auth gate, LoginScreen (Google + dev picker), main App, SubjectView, EisenhowerView, EmptyState |
+| `src/types.ts` | TypeScript interfaces: Task, Category, Pattern, User, CreateTaskOpts |
+| `src/lib/api.ts` | Full typed API client (all endpoints) |
+| `src/components/CaptureBar.tsx` | Task input — importance/urgency on ONE ROW (the bug from old frontend), due-date picker, classifying shimmer |
+| `src/components/TaskCard.tsx` | Task card — done toggle, delete with confirm, edit click, urgency color edge |
+| `src/components/EditDialog.tsx` | Importance/urgency override dialog |
+| `src/components/FeedbackButton.tsx` | Floating feedback button + modal |
+| `src/views/CoursesView.tsx` | Course cards — confidence rating, gap notes debounced save, **keyword editor** (expand → view chips → add/delete) |
+| `src/views/ScheduleView.tsx` | Schedule — collapsible course groups, pattern rows (kind/day/time/importance/urgency), add/delete with two-click confirm |
+| `src/components/ui/` | shadcn components: button, badge, card, input, textarea, dialog, tabs, separator, sonner |
+
+#### Key config files
+- `vite.config.ts` — Tailwind v4 plugin + `@/` path alias + proxy all API paths to `:8001`
+- `tsconfig.json` + `tsconfig.app.json` — path alias configured, `ignoreDeprecations: "6.0"` for baseUrl
+- `src/index.css` — shadcn CSS variables theme (light/dark), Tailwind v4 import
+
+#### API proxy
+All fetch calls in the Vite app go to relative paths (`/tasks`, `/auth/me`, etc.). Vite proxies them to `http://localhost:8001` in dev. In production, the built static files are served by FastAPI directly, so no proxy is needed.
+
+### Bug fixes from previous session
+
+Three bugs were fixed before the Vite migration began:
+
+1. **CaptureBar layout** — importance/urgency buttons were wrapping to two rows. Fixed with `flex-wrap: nowrap` + `flex-shrink: 0` on each axis span. The Vite version has this correct by design.
+
+2. **New-course pipeline** (`test_new_course_pipeline.py`) — classifier returned "כללי" for newly created courses because the course name wasn't in the keyword list yet. Fixed in `app.py`: when a category is created, the course name is prepended to the generated keywords immediately.
+   ```python
+   kw_str = classifier.generate_keywords(payload.name)
+   base_kw = payload.name
+   kw_str = f"{base_kw},{kw_str}" if kw_str else base_kw
+   # then UPDATE categories SET keywords=? WHERE id=?
+   ```
+
+3. **time_travel_test.py** — broke after multi-user refactor because `compute_tasks()` now requires `user_id`. Fixed: `compute.compute_tasks(now, scope=scope, user_id=1)`.
+
+4. **Typo recovery** — "דתס" was classified as "כללי" instead of falling to AI. Root cause: 0 keyword matches returned "כללי" directly, skipping AI. Fix: added `_levenshtein()` + `_fuzzy_course_hit()` to `keyword_classifier.py`. Edit-distance ≤ 1 against course NAME words triggers `return None` (AI fallback) instead of "כללי". "דתס" is edit-distance 1 from "דת" → AI correctly identifies as "דת האסלאם".
+
+5. **Keyword editor** — added to `CoursesView` (both old and new frontend). Users can expand a section on each course card to view, add, and delete the keywords driving the classifier.
+
+### Why you couldn't see changes in the old frontend
+
+The old `frontend/` served JavaScript files via `NoCacheStaticFiles` in FastAPI. In theory this should disable caching. In practice, Chrome's service worker, disk cache, and HTTP/1.1 conditional GET all conspired to serve stale files even in incognito. This is a known class of problem with "vanilla static files with no content hash in filename." The Vite solution is permanent: every build asset has a content hash in the filename (`index-BxK2j9aM.js`), so the browser always fetches the new file.
+
+### Three tasks before deployment
+
+#### 1. Google OAuth (required for real users)
+See `OAUTH_SETUP.md`. Paused at Cloud Console Step 1 in session 5. Steps:
+- Create OAuth client → add redirect URI `http://localhost:8001/auth/google/callback` for dev, `https://yourdomain.com/auth/google/callback` for prod
+- Set `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` in `.env`
+- Set `DEV_MODE=0` in production
+
+#### 2. Frontend: build for production
+```bash
+cd frontend-vite
+npm run build   # outputs to frontend-vite/dist/
+```
+
+Then in `app.py`, add a mount to serve the Vite dist at the root:
+```python
+from fastapi.staticfiles import StaticFiles
+# Add AFTER all API routes so API routes take precedence:
+app.mount("/", StaticFiles(directory="frontend-vite/dist", html=True), name="frontend")
+```
+
+The Vite build uses relative paths (`/tasks`, `/auth/me`) which FastAPI already handles — no proxy needed in production.
+
+#### 3. Database: SQLite persistence on deploy
+SQLite works fine for low concurrency. Requirement: **persistent disk** at deploy target (not ephemeral). See `DEPLOY.md`. Copy `academic.sqlite3` to the server as part of first deploy.
+
+### How to start dev (updated)
+
+```bash
+# Terminal 1 — backend
+cd C:\Users\amit shani\academic_dashboard
+.venv\Scripts\python.exe -m uvicorn app:app --port 8001
+
+# Terminal 2 — frontend (NEW)
+cd C:\Users\amit shani\academic_dashboard\frontend-vite
+npm run dev
+# Open: http://localhost:5173
+```
+
+### Files changed (session 6)
+
+**Backend fixes:**
+- `app.py` — prepend course name to keywords on `createCategory`; added "keywords" to `_CATEGORY_FIELDS` PATCH whitelist
+- `keyword_classifier.py` — added `_levenshtein()`, `_fuzzy_course_hit()`, fuzzy check before "כללי" fallback
+- `models.py` — added `keywords: Optional[str]` to `Category` and `CategoryUpdate`
+- `time_travel_test.py` — fixed `compute_tasks(user_id=1)` call
+
+**New Vite frontend (all new):**
+- `frontend-vite/` — entire directory, see file table above
+
+End of session 6 handoff.
+
+---
+
+## 13. Session 7 — what changed (2026-05-04)
+
+### Current working state
+
+**The old frontend at http://localhost:8001/app IS the active UI.** The Vite migration (`frontend-vite/`) was built and compiles cleanly but was rejected by the user as too different from the original — missing features, less polished. The Vite project stays for future use but is NOT the primary UI.
+
+### Root cause of "can't see changes" — FIXED
+
+The old frontend uses `@babel/standalone` which compiles JSX in the browser and caches the compiled output in `localStorage` with keys prefixed `babel-`. When the server sends a new `.jsx` file, the browser sometimes served an old HTTP-cached response, Babel saw the same content hash, and returned the old compiled version from localStorage.
+
+**Fix applied to `frontend/index.html`:** Added one inline script that runs before Babel loads, clearing all `babel-*` keys from localStorage on every page load:
+
+```html
+<script>Object.keys(localStorage).filter(k=>k.startsWith('babel-')).forEach(k=>localStorage.removeItem(k));</script>
+```
+
+This means every reload now gets freshly compiled code. No more cache issues.
+
+Also removed the leftover `?v=2` and `?v=4` query strings from script tags (they were part of a failed cache-busting attempt that created double query strings like `?v=4?ts=...`).
+
+### Features added to old frontend this session
+
+1. **Keyword editor on course cards** (`frontend/src/views/CoursesView.jsx`):
+   - Each course card has an expandable keyword section (open by default, `showKw=true`)
+   - Shows current keyword chips, each with a × delete button
+   - Add new keywords via input + Enter or "הוסף" button
+   - Saves to backend immediately on add/delete via PATCH `/categories/{id}`
+   - Toggle button styled as a bordered pill, not invisible grey text
+
+2. **CaptureBar one-row layout** (`frontend/src/CaptureBar.jsx`):
+   - Importance/urgency buttons stay on one row with `flexWrap: "nowrap"`
+
+3. **Typo recovery** (`keyword_classifier.py`):
+   - "דתס" → edit-distance 1 from "דת" → falls to AI, not "כללי"
+
+### What NOT to do next session
+
+- Don't restart the server with `--reload` and no port; use `.venv\Scripts\uvicorn app:app --port 8001`
+- Don't add `?v=N` query strings to script tags in index.html — the babel-clear script handles it now
+- Don't use the Vite project (`frontend-vite/`) as the active UI without a deliberate decision to redesign
+
+### How to start
+
+```bash
+# Backend
+cd C:\Users\amit shani\academic_dashboard
+.venv\Scripts\uvicorn app:app --port 8001
+
+# Open browser
+http://localhost:8001/app
+```
+
+The `babel-` cache clear is in `index.html` — no browser tricks needed to see changes.
+
+End of session 7 handoff.
+
+---
+
+## 14. Session 8 — what changed (2026-05-04)
+
+### Root cause fixed: blank page on launch
+
+The app was rendering a blank white page. Root cause: `SubjectChip` in `atoms.jsx` fell back to `window.SUBJECT_META.other` (an English key from the original life_dashboard codebase). That key doesn't exist — this dashboard uses Hebrew course name keys only. Any task whose `category_name` wasn't in the hardcoded `SUBJECT_META` (e.g., a user-created course like "מודיעין נח") caused a React render crash.
+
+**Two-part fix:**
+
+1. `atoms.jsx` — fallback chain: `SUBJECT_META[subject]` → `SUBJECT_META["כללי"]` → generic grey chip with the actual name as label. Unknown courses no longer crash.
+2. `App.jsx` + `claude-api.jsx` — on mount, `listTasks` and `listCategories` are fetched in parallel. Each category is registered in `window.SUBJECT_META` (using its `color_dark` field) before tasks render. `createCategory` also registers the new course immediately so no page refresh is needed.
+
+### Hardening session — 6 bugs fixed, benchmarks restored to 28/28
+
+Spawned parallel research agents (backend + frontend) to audit all edge cases. Fixed everything they found.
+
+#### Backend fixes
+
+| File | Line | Bug | Fix |
+|------|------|-----|-----|
+| `keyword_classifier.py` | 108 | `"את"` (2-char Hebrew direct-object marker) fuzzy-matched `"דת"` with edit-distance 1 → false AI fallback → benchmark 27/28 | Changed input-word min length from 2 → 3. Ref-word min stays at 2 so `"דתס"` → `"דת"` typo detection still works. |
+| `compute.py` | 126 | `datetime.fromisoformat(s)` on a malformed DB timestamp crashed `compute_tasks()` → 500 on task load | Wrapped in `try/except (ValueError, TypeError)`, returns `None` on bad value |
+
+#### Frontend fixes
+
+| File | Bug | Fix |
+|------|-----|-----|
+| `views/HistoryView.jsx` | Hardcoded `http://localhost:8001/history` — breaks on any deployed host; also missing `credentials: "include"` | Dynamic `_HIST_BASE` constant (same pattern as `claude-api.jsx`) + `credentials: "include"` |
+| `views/GroupView.jsx` | `meta.color` accessed after `meta?.icon` optional chain — crashes when task category isn't in `SUBJECT_META` (e.g. user-created course) | `meta?.color` with fallback to `"var(--paper-3)"` / `"var(--ink-3)"` |
+| `TaskCard.jsx` | `URGENCY_COLOR[task.urgency]` is `undefined` when `urgency` is null → CSS background renders the literal string `"undefined"` | Fallback: `|| "transparent"` |
+| `views/CoursesView.jsx` | `saveKeywords` fetch missing `credentials: "include"` — would silently 401 on any cross-origin deploy | Added `credentials: "include"` |
+
+### Benchmark results after fixes
+
+```
+benchmark_classifier.py:   28/28  (100%)   ← was 27/28
+test_new_course_pipeline.py: PASS
+time_travel_test.py:         PASS
+```
+
+### Files changed (session 8)
+
+**Backend:**
+- `keyword_classifier.py` — fuzzy input-word min length 2 → 3
+- `compute.py` — try/except around `fromisoformat`
+
+**Frontend:**
+- `frontend/src/atoms.jsx` — `SubjectChip` fallback chain (no `.other`, use `"כללי"` then generic)
+- `frontend/src/App.jsx` — parallel `listTasks` + `listCategories` on mount; register categories into `SUBJECT_META`
+- `frontend/src/claude-api.jsx` — `createCategory` registers new course in `SUBJECT_META` immediately
+- `frontend/src/TaskCard.jsx` — null-safe `urgColor`
+- `frontend/src/views/HistoryView.jsx` — dynamic base URL + credentials
+- `frontend/src/views/GroupView.jsx` — null-safe `meta.color`
+- `frontend/src/views/CoursesView.jsx` — `credentials: "include"` in `saveKeywords`
+
+### How to start (unchanged)
+
+```bash
+# Backend
+cd C:\Users\amit shani\academic_dashboard
+.venv\Scripts\uvicorn app:app --port 8001
+
+# Open browser
+http://localhost:8001/app
+```
+
+End of session 8 handoff.
+
+---
+
+## 15. Session 9 — what changed (2026-05-05)
+
+### Hebrew onboarding tutorial (new feature)
+
+First-time users now see a 7-step Hebrew modal automatically after tasks load. Returning users get a persistent `?` button at `bottom: 70, insetInlineEnd: 20` (above the Feedback button).
+
+**Implementation:**
+- `TUTORIAL_STEPS` constant + `TutorialModal` + `TutorialButton` components in `App.jsx` (after `FeedbackButton`)
+- Seen-state tracked via `window.userStorage.get/set("tutorial.v1.seen")` (per-user localStorage, cleared on logout)
+- Mount effect checks the flag after tasks load — auto-opens only if unset
+- `closeTutorial()` sets the flag and closes; triggered by "דלג" (skip), "סיום" (finish), or backdrop click
+- Step dots + "הבא"/"הקודם" navigation; final step shows "סיום"
+
+**Tutorial step order** (intentional — validated by sub-agent):
+1. Welcome
+2. Courses first (add keywords — without this all tasks land in "כללי" and stay orphaned)
+3. Schedule — set up weekly recurring patterns per course
+4. Add tasks — now classification works
+5. Views — explore different angles
+6. Edit tasks — fix misclassifications
+7. Done — directs user to "לדשבורד הראשי" (not "לכאן" which was ambiguous)
+
+Icons used: `Book`, `Pencil`, `Layers`, `Calendar`, `Sparkles` — all from the existing `window.Icon` bundle.
+
+### Keyword collapse bars — default closed
+
+`CoursesView.jsx` — `useState(true)` → `useState(false)` for `showKw`. Keyword sections now start collapsed; user expands per course when needed.
+
+### CaptureBar improvements
+
+- **Calendar button** — was a small borderless icon that blended into the bar. Now a pill-shaped button (`var(--paper-2)` background, `var(--line-strong)` border) showing only the icon when no date is set, expanding to show the formatted date (e.g., "5 מאי") with an accent border once a date is picked.
+- **`datetime-local` input** — was completely unstyled (raw browser default). Now has matching padding, rounded border, `var(--paper-2)` background, and `colorScheme` that respects light/dark theme.
+
+### UI hardening (agent-driven audit)
+
+5 bugs/issues found and fixed across the codebase:
+
+| File | Issue | Fix |
+|------|-------|-----|
+| `App.jsx` ~line 999 | **Bug:** Duplicate `style` prop on "פתח היסטוריה" button — second prop silently overwrote border + padding from first | Merged into single `style` object |
+| `App.jsx` brand bar | `paddingTop: 32` created excessive top whitespace | `32 → 20`, `paddingBottom: 18 → 14` |
+| `App.jsx` footer | Keyboard shortcut bar always rendered, even with zero tasks | Wrapped in `{tasks.length > 0 && ...}` |
+| `TaskCard.jsx` step list | Top padding `2px` vs bottom `10px` — lopsided gap between header and first step | `"2px 12px 10px" → "8px 12px 10px"` |
+| `CoursesView.jsx` | "אין מילות מפתח" rendered even when keyword section was collapsed | Added `&& showKw` guard |
+
+### Files changed (session 9)
+
+- `frontend/src/App.jsx` — tutorial state + components, `closeTutorial`, history button style fix, brand bar padding, footer conditional
+- `frontend/src/views/CoursesView.jsx` — `showKw` default `false`, "אין מילות מפתח" conditional on `showKw`
+- `frontend/src/CaptureBar.jsx` — calendar button redesign, `datetime-local` input styling
+- `frontend/src/TaskCard.jsx` — steps list top padding fix
+
+### How to start (unchanged)
+
+```bash
+# Backend
+cd C:\Users\amit shani\academic_dashboard
+.venv\Scripts\uvicorn app:app --port 8001
+
+# Open browser
+http://localhost:8001/app
+```
+
+End of session 9 handoff.

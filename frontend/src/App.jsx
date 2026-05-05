@@ -162,14 +162,34 @@ function App({ user }) {
   const [fadingIds, setFadingIds] = useState({});
   const [tw, setTw] = useState(TWEAK_DEFAULTS);
   const [loadError, setLoadError] = useState(null);
+  const [showTutorial, setShowTutorial] = useState(false);
   const captureSeedRef = useRef(null);
 
-  // Load tasks from backend on mount.
+  // Load tasks + categories on mount. Categories must come first so SubjectChip
+  // has correct metadata for every course (including user-created ones) before
+  // the task list renders.
   useEffect(() => {
     (async () => {
       try {
-        const fromApi = await window.claudeAPI.listTasks();
+        const [fromApi, cats] = await Promise.all([
+          window.claudeAPI.listTasks(),
+          window.claudeAPI.listCategories(),
+        ]);
+        cats.forEach(cat => {
+          if (!window.SUBJECT_META[cat.name]) {
+            window.SUBJECT_META[cat.name] = {
+              color: "#" + (cat.color_dark || "6B7280"),
+              icon: "Book",
+              label: cat.name,
+              bg: "#F3F4F6",
+              mid: "#9CA3AF",
+            };
+          }
+        });
         setTasks(fromApi);
+        if (!window.userStorage.get("tutorial.v1.seen")) {
+          setShowTutorial(true);
+        }
       } catch (e) {
         console.error("Failed to load tasks from backend:", e);
         setLoadError(String(e.message || e));
@@ -327,6 +347,11 @@ function App({ user }) {
     }));
   };
 
+  const closeTutorial = () => {
+    window.userStorage.set("tutorial.v1.seen", true);
+    setShowTutorial(false);
+  };
+
   const onScrollToTask = (id) => {
     setView("all");
     setHighlightedId(id);
@@ -389,7 +414,7 @@ function App({ user }) {
         {/* Brand bar */}
         <div style={{
           display: "flex", alignItems: "center", gap: 14,
-          paddingTop: 32, paddingBottom: 18,
+          paddingTop: 20, paddingBottom: 14,
         }}>
           <div style={{
             width: 28, height: 28, borderRadius: 8,
@@ -453,7 +478,7 @@ function App({ user }) {
         {/* SuggestionsPanel removed — academic dashboard uses a closed
             category list, no AI suggestions for new dimensions. */}
 
-        <div style={{
+        {tasks.length > 0 && <div style={{
           display: "flex", justifyContent: "space-between", alignItems: "center",
           marginTop: 48, paddingTop: 24,
           borderTop: "1px solid var(--line)",
@@ -465,12 +490,14 @@ function App({ user }) {
             <Kbd>1</Kbd>–<Kbd>6</Kbd>{t("kbdViews")}
             <Kbd>↵</Kbd>{t("kbdSend")}
           </span>
-        </div>
+        </div>}
       </div>
 
       {editing && <window.EditDialog task={editing} onClose={() => setEditing(null)} onSave={handleSaveEdit} />}
       <TweaksHost tw={tw} setTw={setTw} user={user} onOpenHistory={() => setView("history")} />
+      <TutorialButton onOpen={() => setShowTutorial(true)} />
       <FeedbackButton />
+      {showTutorial && <TutorialModal onClose={closeTutorial} />}
     </div>
   );
 }
@@ -618,6 +645,172 @@ function FeedbackButton() {
         </div>
       )}
     </>
+  );
+}
+
+const TUTORIAL_STEPS = [
+  {
+    title: "ברוכים הבאים לדשבורד!",
+    body: "כאן תנהל את כל המשימות האקדמיות שלך — תרגילים, מבחנים, הרצאות וכל מה שביניהם. לפני שמתחילים, כדאי לעשות שלושה צעדים קצרים כדי שהמערכת תכיר את הקורסים שלך.",
+    icon: "Book",
+  },
+  {
+    title: "צעד 1 — הגדר את הקורסים שלך",
+    body: "לך ללשונית 'קורסים' והוסף את הקורסים שאתה לומד השנה. הוסף מילות מפתח לכל קורס (שם הקורס, שם המרצה, קיצורים שאתה משתמש בהם) — כך המערכת תסווג משימות לקורס הנכון אוטומטית. בלי זה, כל המשימות ייכנסו לקטגוריה 'כללי'.",
+    icon: "Book",
+  },
+  {
+    title: "צעד 2 — הגדר לוח שבועי",
+    body: "לך ללשונית 'מערכת שעות' והוסף לכל קורס את ההרצאות, התרגולים, שיעורי הבית והקריאות הקבועות שלך עם יום ושעה. המערכת תייצר את המשימות האלה אוטומטית כל שבוע.",
+    icon: "Calendar",
+  },
+  {
+    title: "צעד 3 — הוסף משימות",
+    body: 'עכשיו כשהקורסים מוגדרים, כתוב משימה בשפה חופשית בשורה בראש הדף. לדוגמה: "להגיש תרגיל 3 בסטטיסטיקה עד יום שישי". המערכת תסווג אוטומטית לקורס הנכון, דחיפות וחשיבות.',
+    icon: "Pencil",
+  },
+  {
+    title: "תצוגות שונות",
+    body: "עבור בין התצוגות בסרגל: רשימה כללית, לפי קורס, מטריצת אייזנהאואר (דחוף × חשוב), ועוד. כל תצוגה מראה את אותן המשימות מזווית אחרת.",
+    icon: "Layers",
+  },
+  {
+    title: "עריכת משימה",
+    body: "לחץ על כל משימה כדי לערוך אותה — לשנות קורס, דחיפות, חשיבות או מועד הגשה. לחץ על ✓ כדי לסמן כבוצע.",
+    icon: "Pencil",
+  },
+  {
+    title: "מוכן להתחיל!",
+    body: "התחל מלשונית 'קורסים', הגדר את הקורסים שלך, ואז חזור לדשבורד הראשי כדי להוסיף משימות. תוכל לפתוח את המדריך שוב בכל עת על ידי לחיצה על כפתור ה-? בפינה.",
+    icon: "Sparkles",
+  },
+];
+
+function TutorialModal({ onClose }) {
+  const [step, setStep] = React.useState(0);
+  const total = TUTORIAL_STEPS.length;
+  const cur = TUTORIAL_STEPS[step];
+  const Ico = window.Icon[cur.icon] || window.Icon.Book;
+  const isLast = step === total - 1;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 300,
+        background: "rgba(0,0,0,.45)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          maxWidth: 460, width: "100%",
+          background: "var(--card)",
+          border: "1px solid var(--line)",
+          borderRadius: 18,
+          boxShadow: "var(--shadow-2)",
+          padding: "28px 28px 24px",
+          direction: "rtl",
+          textAlign: "right",
+          animation: "spring-in .35s cubic-bezier(.34,1.56,.64,1)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <span style={{ fontSize: 12, color: "var(--ink-3)", fontFamily: "var(--font-mono)" }}>
+            {step + 1}/{total}
+          </span>
+          <button
+            onClick={onClose}
+            style={{
+              border: "none", background: "transparent",
+              color: "var(--ink-3)", fontSize: 12,
+              cursor: "pointer", padding: "2px 8px", borderRadius: 6,
+              fontFamily: "inherit",
+            }}
+          >דלג</button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginBottom: 18 }}>
+          <div style={{
+            width: 52, height: 52, borderRadius: 16,
+            background: "rgba(217,99,58,.1)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <Ico size={26} stroke={1.5} style={{ color: "var(--accent)" }} />
+          </div>
+          <h2 style={{
+            margin: 0, fontSize: 20, fontWeight: 700,
+            color: "var(--ink)", textAlign: "center", lineHeight: 1.3,
+          }}>{cur.title}</h2>
+        </div>
+
+        <p style={{
+          margin: "0 0 24px",
+          fontSize: 14, lineHeight: 1.75,
+          color: "var(--ink-2)", textAlign: "right",
+        }}>{cur.body}</p>
+
+        <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 22 }}>
+          {TUTORIAL_STEPS.map((_, i) => (
+            <div key={i} style={{
+              width: i === step ? 18 : 6, height: 6, borderRadius: 999,
+              background: i === step ? "var(--accent)" : "var(--line)",
+              transition: "all .2s ease",
+            }} />
+          ))}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+          {step > 0 && (
+            <button
+              onClick={() => setStep(s => s - 1)}
+              style={{
+                padding: "8px 18px", borderRadius: 10, fontSize: 13,
+                border: "1px solid var(--line)", background: "var(--card)",
+                color: "var(--ink-2)", cursor: "pointer", fontFamily: "inherit",
+              }}
+            >הקודם</button>
+          )}
+          <button
+            onClick={() => isLast ? onClose() : setStep(s => s + 1)}
+            style={{
+              padding: "8px 24px", borderRadius: 10, fontSize: 13,
+              border: "none", background: "var(--ink)", color: "var(--paper)",
+              fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+            }}
+          >{isLast ? "סיום" : "הבא"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TutorialButton({ onOpen }) {
+  return (
+    <button
+      onClick={onOpen}
+      title="מדריך למשתמש"
+      style={{
+        position: "fixed",
+        bottom: 70,
+        insetInlineEnd: 20,
+        zIndex: 100,
+        width: 36, height: 36,
+        borderRadius: 999,
+        border: "1px solid var(--line)",
+        background: "var(--card)",
+        color: "var(--ink-3)",
+        fontSize: 16, fontWeight: 700,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "pointer",
+        boxShadow: "var(--shadow-2)",
+        fontFamily: "var(--font-sans)",
+      }}
+    >?</button>
   );
 }
 
@@ -802,8 +995,8 @@ function TweaksHost({ tw, setTw, user, onOpenHistory }) {
             padding: "6px 14px", borderRadius: 8, fontSize: 12,
             border: "1px solid var(--line)", background: "var(--card)",
             color: "var(--ink-2)", cursor: "pointer", fontFamily: "inherit",
+            display: "inline-flex", alignItems: "center", gap: 6,
           }}
-        style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
         ><window.Icon.Book size={13} stroke={1.8} /> פתח היסטוריה</button>
       </TS>
       <TS label={t("tweaksAboutMe")}>

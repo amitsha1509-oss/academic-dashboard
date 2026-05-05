@@ -263,7 +263,17 @@ async function createCategory(payload) {
     body: JSON.stringify(payload),
     keepalive: true,
   });
-  return _json(r);
+  const cat = await _json(r);
+  if (cat && cat.name && !window.SUBJECT_META[cat.name]) {
+    window.SUBJECT_META[cat.name] = {
+      color: "#" + (cat.color_dark || "6B7280"),
+      icon: "Book",
+      label: cat.name,
+      bg: "#F3F4F6",
+      mid: "#9CA3AF",
+    };
+  }
+  return cat;
 }
 
 async function deleteCategory(id) {

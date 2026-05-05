@@ -157,19 +157,25 @@ function CaptureBar({ onCreate, onStartManual, classifying, seedRef }) {
             onClick={() => setShowDuePicker(s => !s)}
             disabled={classifying}
             style={{
-              display: "flex", alignItems: "center", justifyContent: "center",
-              width: 38, height: 38, borderRadius: 12,
-              border: pickedDue ? "2px solid var(--accent)" : "1px solid var(--line)",
-              background: pickedDue ? "rgba(217,99,58,.08)" : "transparent",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+              height: 36,
+              padding: pickedDue ? "0 11px" : "0 9px",
+              borderRadius: 10,
+              border: pickedDue ? "2px solid var(--accent)" : "1.5px solid var(--line-strong)",
+              background: pickedDue ? "rgba(217,99,58,.08)" : "var(--paper-2)",
               color: pickedDue ? "var(--accent)" : (classifying ? "var(--ink-4)" : "var(--ink-2)"),
               cursor: classifying ? "default" : "pointer",
               transition: "all .15s ease",
               flexShrink: 0,
+              fontSize: 12, fontFamily: "inherit",
               marginInlineEnd: 2,
             }}
             title="בחר תאריך יעד"
           >
-            <CalendarIcon size={16} stroke={1.8} />
+            <CalendarIcon size={15} stroke={2} />
+            {pickedDue && (
+              <span>{new Date(pickedDue).toLocaleDateString("he-IL", { day: "numeric", month: "short" })}</span>
+            )}
           </button>
 
           {/* Manual-entry button: skip AI, set dimensions yourself. */}
@@ -226,6 +232,16 @@ function CaptureBar({ onCreate, onStartManual, classifying, seedRef }) {
               type="datetime-local"
               value={pickedDue}
               onChange={e => setPickedDue(e.target.value)}
+              style={{
+                flex: 1,
+                padding: "6px 10px", borderRadius: 8, fontSize: 13,
+                border: "1px solid var(--line-strong)",
+                background: "var(--paper-2)",
+                color: "var(--ink)",
+                fontFamily: "inherit",
+                outline: "none",
+                colorScheme: document.documentElement.dataset.theme === "dark" ? "dark" : "light",
+              }}
             />
             {pickedDue && (
               <button

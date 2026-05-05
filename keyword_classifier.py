@@ -105,7 +105,7 @@ def _fuzzy_course_hit(text: str, keywords: dict) -> bool:
     word in a course NAME (not keyword phrases — phrase fragments like 'קור'
     from splitting 'קור'אן' cause false positives).
     Used to catch typos before committing to 'כללי'."""
-    input_words = [w for w in re.findall(r'\w+', _normalize(text)) if len(w) >= 2]
+    input_words = [w for w in re.findall(r'\w+', _normalize(text)) if len(w) >= 3]
     if not input_words:
         return False
 

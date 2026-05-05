@@ -75,7 +75,8 @@ const IMPORTANCE_COLOR = { high: "var(--imp-high)", medium: "var(--imp-med)", lo
 
 // ─── Subject chip ───────────────────────────────────────────
 function SubjectChip({ subject, size = "md" }) {
-  const meta = window.SUBJECT_META[subject] || window.SUBJECT_META.other;
+  const base = window.SUBJECT_META[subject] || window.SUBJECT_META["כללי"] || { icon: "Book", color: "#6B7280", bg: "#F3F4F6", mid: "#9CA3AF" };
+  const meta = window.SUBJECT_META[subject] ? base : { ...base, label: subject };
   const Ico = window.Icon[meta.icon];
   const small = size === "sm";
   return (
