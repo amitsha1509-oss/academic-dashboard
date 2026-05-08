@@ -1261,3 +1261,121 @@ The Groq AI fallback currently gets the user's category list as valid options, b
 - 🟢 **Re-classify feature** — "re-classify all tasks using current keywords" button in CoursesView.
 
 End of session 14 handoff.
+
+---
+
+## Session 15 — Key-based admin panel + bug fixes (2026-05-08)
+
+### Summary
+
+This session fixed all 4 bugs from session 14, solved issues A–D, added a key-based admin panel, and deployed to Railway. Three follow-up bugs were found and fixed after the initial deploy.
+
+---
+
+### All issues fixed this session
+
+#### Fix 1 — EditDialog: free-form course creation blocked
+`extensible = (dim === "subject")` → `extensible = false`.
+Users can no longer type arbitrary course names into the subject field. (Was already noted in session 14 — confirmed shipped.)
+
+#### Fix 2 — OnboardingWizard: skip existing courses on re-save
+`save()` now calls `listCategories()` first and skips `createCategory` for any course name that already exists. Error message on 409 changed to "קורס עם שם זה כבר קיים". Save button disabled when `validCourses.length === 0`. `keywords` field changed from `[]` to `""` (backend expects a string).
+
+#### Fix 3 — ScheduleView: new course unlocks CaptureBar
+`ScheduleView` now accepts an `onCoursesChanged` prop. `handleCreateCourse` calls `onCoursesChanged?.()` on success. `App.jsx` passes `onCoursesChanged={() => setNoCourses(false)}`.
+
+#### Fix A — Stale `_catNameToId` after course rename
+`CoursesView.jsx` `handleNameSave` now calls `window.claudeAPI.listCategories()` after each successful name PATCH. This atomically refreshes both `_catNameToId` and `window.DIMENSIONS.subject`.
+
+#### Fix C — Same-keyword conflict warning
+`CoursesView.jsx` `addKw()` now checks all other categories for the same keyword before saving. If found: shows a toast "X קיים גם ב-Y — כשיהיה ספק, ה-AI יחליט" and saves anyway (user is warned, not blocked). `allCats` prop is now passed to `CourseCard`.
+
+#### Fix D — AI classifier enforces closed list
+`classifier.py`: after AI returns a category, validates it against `user_categories`. If invalid: retries once with an explicit constraint appended ("CRITICAL CORRECTION: category_name MUST be exactly one of: …"). If still invalid after retry: falls back to `user_categories[0]`.
+
+---
+
+### New feature: key-based admin panel
+
+**Problem:** the old admin view required logging in as user 1 via OAuth and used cross-origin cookies (broken from localhost). The user also couldn't easily see or reset other users' accounts.
+
+**Solution:** Secret-key URL. Set `ADMIN_KEY` env var on Railway; visit `/admin?key=ADMIN_KEY`.
+
+#### How it works
+
+- `_is_admin(request: Request) -> bool` helper in `app.py` — checks `?key=` param against `ADMIN_KEY` env var OR session cookie (user_id == 1). **Does NOT use FastAPI `Cookie()` injection** (that requires `Depends`, can't be called directly).
+- `/admin` — HTML panel, gated by `_is_admin`. Injects `?key=VALUE` into all JS fetch calls via `__KEY_PARAM__` placeholder (replaced at render time). Returns 403 HTML with instructions if no key.
+- `/admin/overview` — JSON, gated by `_is_admin`. Returns all users with stats.
+- `/admin/users/{id}/reset` — POST, gated by `_is_admin`. Wipes all data for target user (adhoc_tasks, completions, recurring_patterns, categories, settings), then recreates a "כללי" catch-all so they're not stuck. Returns 404 for unknown user. Blocks resetting user 1 (admin).
+
+#### How to access
+
+```
+https://academic-dashboard-production-d0d5.up.railway.app/admin?key=YOUR_KEY
+```
+
+Set the key:
+```powershell
+railway variables set "ADMIN_KEY=your-secret-here"
+```
+
+Or via Railway dashboard → Variables tab → New Variable: `ADMIN_KEY`.
+
+---
+
+### Admin panel bugs fixed post-deploy
+
+#### Bug 1 — Reset crashed with 500
+`admin_reset_user` referenced `user.id` in a print statement after the endpoint was refactored to not use `Depends(get_current_user)`. `user` was undefined → NameError → 500.
+**Fix:** `print(f"[admin] user {target_id} reset by admin {user.id}")` → `print(f"[admin] user {target_id} reset")`.
+
+#### Bug 2 — Task counts only showed adhoc tasks (showed "4" when user had many more)
+The overview query joined only `adhoc_tasks`. Most tasks are "virtual" — computed from `recurring_patterns` at request time with no DB row until they're marked done. Open recurring tasks have NO row in the DB — they can't be counted without computing the full semester window.
+
+**Fix:** Query now returns 4 columns instead of 2:
+- `adhoc_open` — adhoc tasks with status='open'
+- `adhoc_done` — adhoc tasks with status in ('done','skipped')
+- `recurring_done` — completions with status='done' (recurring tasks user marked done)
+- `recurring_skipped` — completions with status='skipped'
+
+**Known limitation (still open):** "Open recurring tasks" — i.e., lectures/HWs sitting there unchecked — are genuinely impossible to count from the DB alone. You'd need to run the same semester-window computation as `GET /tasks`. The admin panel now correctly shows what CAN be counted; it does not claim to show total open tasks.
+
+---
+
+### Git versions
+
+| Tag | Commit | Description |
+|-----|--------|-------------|
+| `v1` | `40f289a` | Last Railway deploy before this session (backup) |
+| `v2` | `eaa2a29` | All session 14 fixes + multi-user hardening |
+| — | `a687729` | Key-based admin panel |
+| — | `fbbc866` | Fix admin reset NameError |
+| — | `fd89e0a` | Fix admin task counts (adhoc vs recurring split) |
+
+---
+
+### Open items (updated)
+
+- 🔴 **Railway has a warning** — user noticed a warning in the Railway dashboard. Not yet investigated. Check Railway service → Deployments tab for the warning message.
+- 🟡 **Admin DB counts incomplete** — open recurring tasks are virtual and can't be counted from DB without semester-window computation. Current counts (adhoc + completions) are accurate for what they claim, but don't reflect total workload.
+- 🔴 **Groq API key rotation** — leaked in early chat. Rotate before real users.
+- 🟡 **Defender exclusion** for project folder — SQLite lock risk on Windows.
+- 🟢 **Re-classify feature** — "re-classify all tasks using current keywords" button in CoursesView.
+- 🟢 **Onboarding "הגדרה מחדש" UX** — wizard re-open now works (existing courses skipped), but placement of button in settings panel is still awkward.
+
+### Files changed (session 15)
+
+**Backend:**
+- `app.py` — `_is_admin()` helper; `/admin`, `/admin/overview`, `/admin/users/{id}/reset` use `_is_admin`; `__KEY_PARAM__` injection in HTML; admin task counts split into 4 columns; reset NameError fixed
+- `classifier.py` — AI closed-list retry logic
+
+**Frontend:**
+- `frontend/src/EditDialog.jsx` — `extensible = false` (free-form course blocked); null-safe `labelFor` for importance/urgency
+- `frontend/src/OnboardingWizard.jsx` — duplicate course skip; save button disabled; `keywords: ""`; 409 error message
+- `frontend/src/views/ScheduleView.jsx` — `onCoursesChanged` prop; `_SEM_START` timezone fix (noon UTC)
+- `frontend/src/App.jsx` — `onCoursesChanged` passed to ScheduleView
+- `frontend/src/claude-api.jsx` — `listCategories()` updates `SUBJECT_META` for all categories
+- `frontend/src/views/CoursesView.jsx` — `allCats` prop to CourseCard; duplicate keyword warning
+- `frontend/src/views/GroupView.jsx` — `window.DIMENSIONS[groupBy] || []` null guard
+
+End of session 15 handoff.
