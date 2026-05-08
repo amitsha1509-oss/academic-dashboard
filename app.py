@@ -965,14 +965,19 @@ def admin_overview(request: Request):
     with db.connect() as c:
         rows = c.execute("""
             SELECT u.id, u.email, u.name, u.created_at,
-                   COUNT(DISTINCT cat.id)                                          AS course_count,
-                   COUNT(DISTINCT p.id)                                            AS pattern_count,
-                   COUNT(DISTINCT CASE WHEN t.status='open' THEN t.id END)        AS tasks_open,
-                   COUNT(DISTINCT CASE WHEN t.status='done' THEN t.id END)        AS tasks_done
+                   COUNT(DISTINCT cat.id)                                               AS course_count,
+                   COUNT(DISTINCT p.id)                                                 AS pattern_count,
+                   COUNT(DISTINCT CASE WHEN t.status='open' THEN t.id END)             AS adhoc_open,
+                   COUNT(DISTINCT CASE WHEN t.status IN ('done','skipped') THEN t.id END) AS adhoc_done,
+                   COUNT(DISTINCT CASE WHEN comp.status='done' THEN
+                       comp.pattern_id || ':' || comp.occurrence_date END)             AS recurring_done,
+                   COUNT(DISTINCT CASE WHEN comp.status='skipped' THEN
+                       comp.pattern_id || ':' || comp.occurrence_date END)             AS recurring_skipped
             FROM users u
             LEFT JOIN categories cat ON cat.user_id = u.id
             LEFT JOIN recurring_patterns p  ON p.user_id  = u.id
             LEFT JOIN adhoc_tasks t         ON t.user_id  = u.id
+            LEFT JOIN completions comp      ON comp.pattern_id = p.id
             GROUP BY u.id
             ORDER BY u.created_at DESC
         """).fetchall()
@@ -1043,11 +1048,11 @@ async function load(){
   if(!r.ok){wrap.innerHTML='<b style="padding:16px;display:block;color:red">Error '+r.status+'</b>';return;}
   const data=await r.json();
   if(!data.length){wrap.innerHTML='<em style="padding:16px;display:block">No users yet.</em>';return;}
-  let h='<table><tr><th>ID</th><th>Email</th><th>Name</th><th>Joined</th><th>Courses</th><th>Patterns</th><th>Tasks open/done</th><th></th></tr>';
+  let h='<table><tr><th>ID</th><th>Email</th><th>Name</th><th>Joined</th><th>Courses</th><th>Patterns</th><th>Adhoc open</th><th>Adhoc done</th><th>Recurring done</th><th>Recurring skipped</th><th></th></tr>';
   for(const u of data){
     const joined=(u.created_at||'').slice(0,10);
     const reset=u.id!==1?`<button class="reset-btn" onclick="resetUser(${u.id},'${(u.name||u.email||'user').replace(/'/g,'')}')">Reset</button>`:'<em style="color:#94a3b8;font-size:12px">admin</em>';
-    h+=`<tr><td>${u.id}</td><td>${u.email||''}</td><td>${u.name||''}</td><td>${joined}</td><td>${u.course_count}</td><td>${u.pattern_count}</td><td>${u.tasks_open} / ${u.tasks_done}</td><td>${reset}</td></tr>`;
+    h+=`<tr><td>${u.id}</td><td>${u.email||''}</td><td>${u.name||''}</td><td>${joined}</td><td>${u.course_count}</td><td>${u.pattern_count}</td><td>${u.adhoc_open}</td><td>${u.adhoc_done}</td><td>${u.recurring_done}</td><td>${u.recurring_skipped}</td><td>${reset}</td></tr>`;
   }
   h+='</table>';
   wrap.innerHTML=h;
