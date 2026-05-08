@@ -1001,7 +1001,7 @@ def admin_reset_user(target_id: int, request: Request):
             "INSERT INTO categories(user_id, name, sort_order) VALUES (?,?,?)",
             (target_id, "כללי", 0),
         )
-    print(f"[admin] user {target_id} reset by admin {user.id}")
+    print(f"[admin] user {target_id} reset")
     return {"ok": True, "user_id": target_id}
 
 
