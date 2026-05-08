@@ -18,10 +18,9 @@ const FEEL_GROUPS = [
 const _CATAPI = window.location.origin.startsWith("http://localhost")
   ? "http://localhost:8001" : "";
 
-function CoursesView() {
+function CoursesView({ onCoursesChanged }) {
   const { t } = window.useLang();
   const [cats, setCats] = useState([]);
-  console.log("CoursesView v3 loaded");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
   const [groupBy, setGroupBy] = useState("default"); // "default" | "feel"
@@ -63,6 +62,7 @@ function CoursesView() {
       const created = await window.claudeAPI.createCategory(payload);
       setCats(cs => [...cs, created].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
       setAdding(false);
+      if (onCoursesChanged) onCoursesChanged();
     } catch (e) {
       window.showToast(t("alertCreateFailed") + ": " + e.message);
     }
@@ -73,7 +73,7 @@ function CoursesView() {
   }
 
   const renderCard = (c) => (
-    <CourseCard key={c.id} cat={c} onPatch={patch} saving={savingId === c.id} />
+    <CourseCard key={c.id} cat={c} onPatch={patch} saving={savingId === c.id} allCats={cats} />
   );
 
   return (
@@ -85,7 +85,6 @@ function CoursesView() {
         padding: "12px 16px",
         fontSize: 13,
         color: "var(--ink-2)",
-        fontStyle: "italic",
       }}>
         דרג כל קורס לפי איך אתה מרגיש איתו. תוכל להרחיב על פערים ספציפיים בתיבה. הכל נשמר אוטומטית.
       </div>
@@ -169,13 +168,16 @@ function GroupToggle({ value, onChange }) {
   );
 }
 
-function CourseCard({ cat, onPatch, saving }) {
+function CourseCard({ cat, onPatch, saving, allCats }) {
   const [notes, setNotes] = useState(cat.gap_notes || "");
   const [showKw, setShowKw] = useState(false);
   const [kwList, setKwList] = useState(
     (cat.keywords || "").split(",").map(k => k.trim()).filter(Boolean)
   );
   const [newKw, setNewKw] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(cat.name);
+  const [editColor, setEditColor] = useState("#" + (cat.color_dark || "6B7280"));
   // Direct save state — bypasses onPatch indirection so unmount cleanup
   // doesn't depend on parent component still being alive.
   const pendingTimer = React.useRef(null);
@@ -202,6 +204,16 @@ function CourseCard({ cat, onPatch, saving }) {
   const addKw = () => {
     const v = newKw.trim();
     if (!v || kwList.includes(v)) { setNewKw(""); return; }
+    // Warn if another course already has this keyword — both will trigger AI disambiguation
+    if (allCats) {
+      const conflict = allCats.find(c =>
+        c.id !== cat.id &&
+        (c.keywords || "").split(",").map(k => k.trim()).includes(v)
+      );
+      if (conflict) {
+        window.showToast(`"${v}" קיים גם ב-${conflict.name} — כשיהיה ספק, ה-AI יחליט`);
+      }
+    }
     const next = [...kwList, v];
     setKwList(next);
     setNewKw("");
@@ -260,6 +272,15 @@ function CourseCard({ cat, onPatch, saving }) {
 
   const setConf = (newConf) => {
     onPatch(cat.id, { self_confidence: newConf === conf ? null : newConf });
+  };
+
+  const saveEdit = async () => {
+    const name = editName.trim();
+    if (!name) return;
+    await onPatch(cat.id, { name, color_dark: editColor.replace("#", "") });
+    // Refresh in-memory maps so GroupView and EditDialog reflect the new name.
+    window.claudeAPI.listCategories().catch(() => {});
+    setEditing(false);
   };
 
   const Btn = ({ value, label, dotColor }) => {
@@ -329,7 +350,55 @@ function CourseCard({ cat, onPatch, saving }) {
           color: "var(--ink)",
         }}
       />
-      {saving && <div style={{ fontSize: 11, color: "var(--ink-4)", marginTop: 4, fontStyle: "italic" }}>שומר...</div>}
+      {saving && <div style={{ fontSize: 11, color: "var(--ink-4)", marginTop: 4 }}>שומר...</div>}
+
+      {/* Edit name + color */}
+      <div style={{ marginTop: 10 }}>
+        {!editing ? (
+          <button
+            onClick={() => { setEditName(cat.name); setEditColor("#" + (cat.color_dark || "6B7280")); setEditing(true); }}
+            style={{
+              background: "none", border: "1px solid var(--line-strong)", padding: "4px 10px",
+              borderRadius: 8, fontSize: 12, color: "var(--ink-3)", cursor: "pointer",
+              fontFamily: "inherit", display: "flex", alignItems: "center", gap: 5,
+            }}
+          >✏️ ערוך שם וצבע</button>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px", background: "var(--paper-2)", borderRadius: 8, border: "1px solid var(--line-strong)" }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                autoFocus
+                type="text"
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") saveEdit(); else if (e.key === "Escape") setEditing(false); }}
+                style={{
+                  flex: 1, padding: "6px 10px", borderRadius: 7, fontSize: 13,
+                  border: "1px solid var(--line-strong)", background: "var(--paper)",
+                  color: "var(--ink)", outline: "none", fontFamily: "inherit",
+                }}
+              />
+              <input
+                type="color"
+                value={editColor}
+                onChange={e => setEditColor(e.target.value)}
+                style={{ width: 36, height: 34, borderRadius: 6, cursor: "pointer", border: "1px solid var(--line-strong)" }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setEditing(false)}
+                style={{ padding: "5px 12px", borderRadius: 7, fontSize: 12, border: "1px solid var(--line)", background: "transparent", color: "var(--ink-2)", cursor: "pointer", fontFamily: "inherit" }}
+              >ביטול</button>
+              <button
+                onClick={saveEdit}
+                disabled={!editName.trim()}
+                style={{ padding: "5px 14px", borderRadius: 7, fontSize: 12, border: "none", background: editName.trim() ? "var(--ink)" : "var(--paper-3)", color: editName.trim() ? "var(--paper)" : "var(--ink-4)", fontWeight: 600, cursor: editName.trim() ? "pointer" : "default", fontFamily: "inherit" }}
+              >שמור</button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Keywords section — hidden by default */}
       <div style={{ marginTop: 10 }}>
@@ -369,7 +438,7 @@ function CourseCard({ cat, onPatch, saving }) {
                 </span>
               ))}
               {kwList.length === 0 && showKw && (
-                <span style={{ fontSize: 12, color: "var(--ink-4)", fontStyle: "italic" }}>אין מילות מפתח</span>
+                <span style={{ fontSize: 12, color: "var(--ink-4)" }}>אין מילות מפתח</span>
               )}
             </div>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>

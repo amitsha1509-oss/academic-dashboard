@@ -6,7 +6,7 @@
 <title>לוח בקרה אקדמי</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700&family=Frank+Ruhl+Libre:wght@400;700&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
   :root{
     /* Warm paper palette */
@@ -53,7 +53,7 @@
     --shadow-2: 0 1px 0 rgba(28,27,25,.04), 0 4px 16px -4px rgba(28,27,25,.10);
     --shadow-3: 0 8px 32px -8px rgba(28,27,25,.18);
 
-    --font-sans: "Inter Tight", "Heebo", system-ui, sans-serif;
+    --font-sans: "Assistant", "Inter Tight", "Heebo", system-ui, sans-serif;
     --font-serif: "Instrument Serif", Georgia, serif;
     --font-display: "Frank Ruhl Libre", "Instrument Serif", Georgia, serif;
     --font-mono: "JetBrains Mono", ui-monospace, monospace;
@@ -114,7 +114,7 @@
 
   /* RTL fixes when lang=he */
   html[dir="rtl"] .rtl-flip { transform: scaleX(-1); }
-  html[dir="rtl"] body { font-family: "Heebo", "Inter Tight", sans-serif; }
+  html[dir="rtl"] body { font-family: "Assistant", "Heebo", "Inter Tight", sans-serif; }
 
   /* Done-fade animation for auto-delete */
   @keyframes done-fade-out {
@@ -151,12 +151,24 @@
     40% { transform: scale(1); opacity: 1; }
   }
 
-  .rtl { direction: rtl; text-align: right; font-family: "Heebo", "Inter Tight", sans-serif; }
+  .rtl { direction: rtl; text-align: right; font-family: "Assistant", "Heebo", "Inter Tight", sans-serif; }
 
   /* Urgency pulse for high-urgency cards */
   @keyframes urg-pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(194,74,42,0), var(--shadow-1); }
     50% { box-shadow: 0 0 0 3px rgba(194,74,42,.10), var(--shadow-1); }
+  }
+
+  /* Tutorial step highlight — glows on the targeted UI element */
+  @keyframes tutorial-glow {
+    0%, 100% { box-shadow: 0 0 0 2px var(--accent), 0 0 6px rgba(217,99,58,.25); }
+    50%       { box-shadow: 0 0 0 4px var(--accent), 0 0 16px rgba(217,99,58,.5); }
+  }
+  .tutorial-glow {
+    animation: tutorial-glow 1.3s ease-in-out infinite !important;
+    border-radius: 9px;
+    position: relative;
+    z-index: 10;
   }
 
   /* Native input overrides — match app aesthetic */
@@ -215,8 +227,9 @@
 <script type="text/babel" src="src/views/CoursesView.jsx"></script>
 <script type="text/babel" src="src/views/ScheduleView.jsx"></script>
 <script type="text/babel" src="src/views/HistoryView.jsx"></script>
-<script type="text/babel" src="src/SuggestionsPanel.jsx"></script>
+<script type="text/babel" src="src/views/AdminView.jsx"></script>
 <script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="src/OnboardingWizard.jsx"></script>
 <script type="text/babel" src="src/App.jsx"></script>
 </body>
 </html>

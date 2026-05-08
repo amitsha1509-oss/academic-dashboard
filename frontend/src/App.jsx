@@ -11,31 +11,19 @@ const VIEWS = [
   { id: "eisenhower", labelKey: "viewEisenhower", icon: "Grid" },
   { id: "courses",    labelKey: "viewCourses",    icon: "Book" },
   { id: "schedule",   labelKey: "viewSchedule",   icon: "Calendar" },
+  { id: "admin",      labelKey: "viewAdmin",      icon: "Settings", adminOnly: true },
 ];
-
-const SUBJECTS = ["projects", "money", "university", "friends", "errands", "health", "other"];
-const CTX = ["@phone", "@computer", "@errand", "@home", "@anywhere"];
-const LEVELS = ["low", "medium", "high"];
 
 // Heuristic mock classifier — handles English + Hebrew, returns next_steps for every task
 function classifyMock(rawText) {
   const t = rawText.toLowerCase();
   const hebrew = window.isHebrew(rawText);
 
-  // Subject — bilingual keyword bank
-  let subject = "other";
-  if (/(mom|dad|friend|dana|sarah|maya|yotam|lunch|call|family|brother|sister|wife|husband)/.test(t)
-      || /(חבר|חברה|אמא|אבא|דנה|אח|אחות|משפחה|ארוחה|פגישה)/.test(rawText)) subject = "friends";
-  else if (/(insurance|reimburs|tax|money|pay|bill|invoice|salary|bank|loan|rent)/.test(t)
-      || /(ביטוח|מס|כסף|תשלום|חשבון|חשבונית|משכורת|בנק|הלוואה|שכ"ד|שכר דירה)/.test(rawText)) subject = "money";
-  else if (/(exam|paper|hw|chapter|class|course|read|university|homework|lecture|assignment)/i.test(rawText)
-      || /(תרגיל|סטטיסטיקה|מבחן|בחינה|שיעורי בית|קורס|אוניברסיטה|הרצאה|פרק|לקרוא)/.test(rawText)) subject = "university";
-  else if (/(grocer|cleaning|errand|pickup|store|buy|shop|laundry|dry clean)/.test(t)
-      || /(קניות|חנות|לקנות|כביסה|ניקוי יבש|לאסוף|סופר|מכבסה)/.test(rawText)) subject = "errands";
-  else if (/(run|gym|doctor|health|sleep|workout|physical|dentist|therapist|medicine)/.test(t)
-      || /(ריצה|כושר|רופא|בריאות|אימון|תרופה|שיניים|פסיכולוג|מטפל)/.test(rawText)) subject = "health";
-  else if (/(code|fix|deploy|pr|review|architecture|pipeline|project|doc|bug|ticket|sprint)/.test(t)
-      || /(קוד|לתקן|פרויקט|מסמך|באג|משימה|סקירה|דדליין)/.test(rawText)) subject = "projects";
+  // Subject: always use a valid course from DIMENSIONS so the task isn't orphaned
+  // in GroupView. English categories ("university", "friends") don't match any
+  // real course name. This fallback only runs when the backend is completely down.
+  const _subjects = window.DIMENSIONS.subject || [];
+  const subject = _subjects.includes("כללי") ? "כללי" : (_subjects[0] || "כללי");
 
   // Context — bilingual
   let context = "@anywhere";
@@ -109,29 +97,7 @@ function classifyMock(rawText) {
     }
   }
 
-  // next_steps — always provide something useful, in the user's language
-  let next_steps;
-  if (hebrew) {
-    if (subject === "friends" && context === "@phone") next_steps = ["לנסח הודעה", "להגדיר תזכורת"];
-    else if (subject === "friends") next_steps = ["לקבוע מקום", "לאשר זמן"];
-    else if (subject === "money") next_steps = ["לפתוח את הטופס", "למצוא מספר פוליסה"];
-    else if (subject === "errands") next_steps = ["להוסיף לרשימת קניות", "לבדוק שעות פתיחה"];
-    else if (subject === "university") next_steps = ["לחסום 90 דק׳ ריכוז", "לפתוח את עמוד הקורס"];
-    else if (subject === "health") next_steps = ["להגדיר התראה", "להוסיף ליומן"];
-    else if (subject === "projects") next_steps = ["למשוך גרסה אחרונה", "לפתוח את המסמך"];
-    else next_steps = ["להוסיף ליומן", "להגדיר תזכורת"];
-  } else {
-    if (subject === "friends" && context === "@phone") next_steps = ["draft message", "set reminder"];
-    else if (subject === "friends") next_steps = ["pick a place", "confirm time"];
-    else if (subject === "money") next_steps = ["open the form tab", "find policy number"];
-    else if (subject === "errands") next_steps = ["add to shopping list", "check store hours"];
-    else if (subject === "university") next_steps = ["block 90min focus time", "open course page"];
-    else if (subject === "health") next_steps = ["set alarm", "add to calendar"];
-    else if (subject === "projects") next_steps = ["pull latest", "open the doc"];
-    else next_steps = ["add to calendar", "set a reminder"];
-  }
-
-  return { subject, context, importance, urgency, time_value, next_steps };
+  return { subject, context, importance, urgency, time_value, next_steps: [] };
 }
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
@@ -163,6 +129,8 @@ function App({ user }) {
   const [tw, setTw] = useState(TWEAK_DEFAULTS);
   const [loadError, setLoadError] = useState(null);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [noCourses, setNoCourses] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const captureSeedRef = useRef(null);
 
   // Load tasks + categories on mount. Categories must come first so SubjectChip
@@ -186,8 +154,15 @@ function App({ user }) {
             };
           }
         });
+        // Keep DIMENSIONS.subject in sync with the DB so GroupView and
+        // EditDialog always show the full live course list, not the
+        // hardcoded list from data.jsx.
+        window.DIMENSIONS.subject = cats.map(c => c.name);
+        setNoCourses(cats.length === 0);
         setTasks(fromApi);
-        if (!window.userStorage.get("tutorial.v1.seen")) {
+        if (cats.length === 0 && !window.userStorage.get("onboarding.v1.done")) {
+          setShowOnboarding(true);
+        } else if (!window.userStorage.get("tutorial.v1.seen")) {
           setShowTutorial(true);
         }
       } catch (e) {
@@ -236,7 +211,7 @@ function App({ user }) {
         _isNew: true,
       } : {
         // Offline / heuristic fallback: keep a client-only task.
-        id: Math.max(0, ...tasks.map(t => t.id)) + 1,
+        id: "offline:" + Date.now(),
         raw_text: raw,
         subject: guess.subject,
         context: guess.context,
@@ -277,9 +252,12 @@ function App({ user }) {
           setTasks(ts => ts.filter(x => x.id !== id));
           setFadingIds(m => { const c = { ...m }; delete c[id]; return c; });
           // Auto-delete on the server too — keeps the DB in sync.
-          window.claudeAPI.deleteTask(id).catch(e =>
-            console.warn(`auto-delete failed for ${id}:`, e.message)
-          );
+          // Skip recurring tasks: they 400 on DELETE by design (use status=skipped).
+          if (!String(id).startsWith("r:")) {
+            window.claudeAPI.deleteTask(id).catch(e =>
+              console.warn(`auto-delete failed for ${id}:`, e.message)
+            );
+          }
         }, 700);
       }, 550);
     }
@@ -295,13 +273,15 @@ function App({ user }) {
   // The draft has no id; handleSaveEdit detects this and routes to create.
   const handleStartManual = (rawText) => {
     if (!rawText || !rawText.trim()) return;
+    const _subs = window.DIMENSIONS.subject || [];
+    const defaultSubject = _subs.includes("כללי") ? "כללי" : (_subs[0] || "כללי");
     setEditing({
       // No id yet — signals "create with manual fields, skip AI"
       raw_text: rawText.trim(),
-      subject: "other",
+      subject: defaultSubject,
       context: "@anywhere",
-      importance: "medium",
-      urgency: "medium",
+      importance: "low",
+      urgency: "low",
       time_value: null,
       status: "open",
     });
@@ -326,7 +306,7 @@ function App({ user }) {
       return;
     }
     // Edit path: persist the changed dimension fields. Strip client-only.
-    const { id, raw_text, status, created_at, next_steps, completed_steps, _isNew, ...editable } = draft;
+    const { id, status, created_at, next_steps, completed_steps, _isNew, ...editable } = draft;
     // Persist FIRST, then update local state on success — avoids "looks saved
     // but isn't" if the backend rejects the change.
     try {
@@ -383,11 +363,12 @@ function App({ user }) {
       case "subject":    return <window.GroupView tasks={tasks} groupBy="subject" {...cardCommonProps} />;
       case "context":    return <window.GroupView tasks={tasks} groupBy="context" {...cardCommonProps} />;
       case "eisenhower": return <window.EisenhowerView tasks={tasks} {...cardCommonProps} />;
-      case "courses":    return <window.CoursesView />;
-      case "schedule":   return <window.ScheduleView />;
+      case "courses":    return <window.CoursesView onCoursesChanged={() => setNoCourses(false)} />;
+      case "schedule":   return <window.ScheduleView onCoursesChanged={() => setNoCourses(false)} />;
       case "history":    return <window.HistoryView />;
       case "calendar":   return <window.CalendarView tasks={tasks} onEdit={handleEdit} />;
       case "agenda":     return <window.AgendaView tasks={tasks} {...cardCommonProps} />;
+      case "admin":      return _IS_LOCAL ? <window.AdminView /> : null;
     }
   };
 
@@ -421,9 +402,8 @@ function App({ user }) {
             background: "var(--ink)",
             display: "flex", alignItems: "center", justifyContent: "center",
             color: "var(--paper)", fontSize: 14, fontWeight: 700,
-            fontFamily: "var(--font-serif)", fontStyle: "italic",
           }}>N</div>
-          <span className="serif" style={{ fontSize: 24, fontStyle: "italic", color: "var(--ink)", letterSpacing: "-.015em" }}>
+          <span style={{ fontSize: 24, fontWeight: 700, color: "var(--ink)", letterSpacing: "-.015em" }}>
             {t("brand")}
           </span>
           <span style={{
@@ -433,8 +413,8 @@ function App({ user }) {
           }}>
             {t("counter", openCount, doneCount)}
           </span>
-          <span style={{ marginInlineStart: "auto", fontSize: 12, color: "var(--ink-3)" }} className="serif">
-            <em>{new Date(window.NOW).toLocaleDateString(window.getLang() === "he" ? "he-IL" : [], { weekday: "long", month: "long", day: "numeric" })}</em>
+          <span style={{ marginInlineStart: "auto", fontSize: 12, color: "var(--ink-3)" }}>
+            {new Date(window.NOW).toLocaleDateString(window.getLang() === "he" ? "he-IL" : [], { weekday: "long", month: "long", day: "numeric" })}
           </span>
         </div>
 
@@ -462,12 +442,15 @@ function App({ user }) {
           </div>
         )}
 
-        <CaptureBarHost
-          onCreate={handleCreate}
-          onStartManual={handleStartManual}
-          classifying={classifying}
-          captureSeedRef={captureSeedRef}
-        />
+        <div data-tutorial-id="capture">
+          <CaptureBarHost
+            onCreate={handleCreate}
+            onStartManual={handleStartManual}
+            classifying={classifying}
+            captureSeedRef={captureSeedRef}
+            noCourses={noCourses}
+          />
+        </div>
 
         <ViewSwitcher view={view} onChange={setView} tasks={tasks} />
 
@@ -484,7 +467,7 @@ function App({ user }) {
           borderTop: "1px solid var(--line)",
           fontSize: 11, color: "var(--ink-4)",
         }}>
-          <span className="serif" style={{ fontStyle: "italic", fontSize: 12.5 }}>{t("tagline")}</span>
+          <span style={{ fontSize: 12.5, color: "var(--ink-4)" }}>{t("tagline")}</span>
           <span style={{ display: "flex", gap: 10, fontFamily: "var(--font-mono)" }}>
             <Kbd>⌘K</Kbd>{t("kbdCapture")}
             <Kbd>1</Kbd>–<Kbd>6</Kbd>{t("kbdViews")}
@@ -494,10 +477,32 @@ function App({ user }) {
       </div>
 
       {editing && <window.EditDialog task={editing} onClose={() => setEditing(null)} onSave={handleSaveEdit} />}
-      <TweaksHost tw={tw} setTw={setTw} user={user} onOpenHistory={() => setView("history")} />
+      <TweaksHost tw={tw} setTw={setTw} user={user} onOpenHistory={() => setView("history")}
+        onOpenOnboarding={() => {
+          window.userStorage.set("onboarding.v1.done", "");
+          setShowOnboarding(true);
+        }}
+      />
       <TutorialButton onOpen={() => setShowTutorial(true)} />
       <FeedbackButton />
       {showTutorial && <TutorialModal onClose={closeTutorial} />}
+      {showOnboarding && (
+        <window.OnboardingWizard onComplete={() => {
+          setShowOnboarding(false);
+          window.claudeAPI.listCategories().then(cats => {
+            cats.forEach(cat => {
+              if (!window.SUBJECT_META[cat.name]) {
+                window.SUBJECT_META[cat.name] = {
+                  color: "#" + (cat.color_dark || "6B7280"),
+                  icon: "Book", label: cat.name, bg: "#F3F4F6", mid: "#9CA3AF",
+                };
+              }
+            });
+            window.DIMENSIONS.subject = cats.map(c => c.name);
+            setNoCourses(cats.length === 0);
+          }).catch(() => {});
+        }} />
+      )}
     </div>
   );
 }
@@ -650,39 +655,27 @@ function FeedbackButton() {
 
 const TUTORIAL_STEPS = [
   {
-    title: "ברוכים הבאים לדשבורד!",
-    body: "כאן תנהל את כל המשימות האקדמיות שלך — תרגילים, מבחנים, הרצאות וכל מה שביניהם. לפני שמתחילים, כדאי לעשות שלושה צעדים קצרים כדי שהמערכת תכיר את הקורסים שלך.",
-    icon: "Book",
-  },
-  {
-    title: "צעד 1 — הגדר את הקורסים שלך",
-    body: "לך ללשונית 'קורסים' והוסף את הקורסים שאתה לומד השנה. הוסף מילות מפתח לכל קורס (שם הקורס, שם המרצה, קיצורים שאתה משתמש בהם) — כך המערכת תסווג משימות לקורס הנכון אוטומטית. בלי זה, כל המשימות ייכנסו לקטגוריה 'כללי'.",
-    icon: "Book",
-  },
-  {
-    title: "צעד 2 — הגדר לוח שבועי",
-    body: "לך ללשונית 'מערכת שעות' והוסף לכל קורס את ההרצאות, התרגולים, שיעורי הבית והקריאות הקבועות שלך עם יום ושעה. המערכת תייצר את המשימות האלה אוטומטית כל שבוע.",
-    icon: "Calendar",
-  },
-  {
-    title: "צעד 3 — הוסף משימות",
-    body: 'עכשיו כשהקורסים מוגדרים, כתוב משימה בשפה חופשית בשורה בראש הדף. לדוגמה: "להגיש תרגיל 3 בסטטיסטיקה עד יום שישי". המערכת תסווג אוטומטית לקורס הנכון, דחיפות וחשיבות.',
-    icon: "Pencil",
-  },
-  {
-    title: "תצוגות שונות",
-    body: "עבור בין התצוגות בסרגל: רשימה כללית, לפי קורס, מטריצת אייזנהאואר (דחוף × חשוב), ועוד. כל תצוגה מראה את אותן המשימות מזווית אחרת.",
-    icon: "Layers",
-  },
-  {
-    title: "עריכת משימה",
-    body: "לחץ על כל משימה כדי לערוך אותה — לשנות קורס, דחיפות, חשיבות או מועד הגשה. לחץ על ✓ כדי לסמן כבוצע.",
-    icon: "Pencil",
-  },
-  {
-    title: "מוכן להתחיל!",
-    body: "התחל מלשונית 'קורסים', הגדר את הקורסים שלך, ואז חזור לדשבורד הראשי כדי להוסיף משימות. תוכל לפתוח את המדריך שוב בכל עת על ידי לחיצה על כפתור ה-? בפינה.",
+    title: "ברוכים הבאים 👋",
+    body: "שלושה צעדים קצרים — ואז המערכת עובדת לבד.",
     icon: "Sparkles",
+  },
+  {
+    title: "1 — קורסים ומילות מפתח",
+    body: "בלשונית המודגשת תוכל להוסיף קורסים, לערוך צבעים ולהוסיף מילות מפתח (שם מרצה, קיצורים) — כדי שה-AI יסווג נכון.",
+    icon: "Book",
+    target: "courses",
+  },
+  {
+    title: "2 — מערכת שעות",
+    body: "הרצאות, תרגולים ושיעורי בית קבועים מוגדרים כאן — ויווצרו אוטומטית כל שבוע. אפשר לערוך ולהוסיף בכל עת.",
+    icon: "Calendar",
+    target: "schedule",
+  },
+  {
+    title: "3 — הוסף משימות חד-פעמיות",
+    body: "שורה זו — למשימות שמופיעות פעם אחת: \"תרגיל 3 סטטיסטיקה עד שישי\". משימות חוזרות (הרצאה, תרגול, שיעורי בית) → מערכת שעות.",
+    icon: "Pencil",
+    target: "capture",
   },
 ];
 
@@ -693,81 +686,83 @@ function TutorialModal({ onClose }) {
   const Ico = window.Icon[cur.icon] || window.Icon.Book;
   const isLast = step === total - 1;
 
+  // Highlight the target UI element for the current step
+  React.useEffect(() => {
+    if (!cur.target) return;
+    const el = document.querySelector(`[data-tutorial-id="${cur.target}"]`);
+    if (!el) return;
+    el.classList.add("tutorial-glow");
+    return () => el.classList.remove("tutorial-glow");
+  }, [step]);
+
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 300,
-        background: "rgba(0,0,0,.45)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 20,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          maxWidth: 460, width: "100%",
-          background: "var(--card)",
-          border: "1px solid var(--line)",
-          borderRadius: 18,
-          boxShadow: "var(--shadow-2)",
-          padding: "28px 28px 24px",
-          direction: "rtl",
-          textAlign: "right",
-          animation: "spring-in .35s cubic-bezier(.34,1.56,.64,1)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <span style={{ fontSize: 12, color: "var(--ink-3)", fontFamily: "var(--font-mono)" }}>
-            {step + 1}/{total}
-          </span>
-          <button
-            onClick={onClose}
-            style={{
-              border: "none", background: "transparent",
-              color: "var(--ink-3)", fontSize: 12,
-              cursor: "pointer", padding: "2px 8px", borderRadius: 6,
-              fontFamily: "inherit",
-            }}
-          >דלג</button>
+    <div style={{
+      position: "fixed",
+      bottom: 80,
+      left: "50%",
+      transform: "translateX(-50%)",
+      zIndex: 300,
+      maxWidth: 420,
+      width: "calc(100vw - 32px)",
+      background: "var(--card)",
+      border: "1px solid var(--line)",
+      borderRadius: 18,
+      boxShadow: "var(--shadow-3)",
+      padding: "18px 22px 16px",
+      direction: "rtl",
+      textAlign: "right",
+      animation: "spring-in .35s cubic-bezier(.34,1.56,.64,1)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <span style={{ fontSize: 11, color: "var(--ink-3)", fontFamily: "var(--font-mono)" }}>
+          {step + 1}/{total}
+        </span>
+        <button
+          onClick={onClose}
+          style={{
+            border: "none", background: "transparent",
+            color: "var(--ink-3)", fontSize: 12,
+            cursor: "pointer", padding: "2px 8px", borderRadius: 6,
+            fontFamily: "inherit",
+          }}
+        >סגור</button>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+          background: "rgba(217,99,58,.1)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <Ico size={18} stroke={1.5} style={{ color: "var(--accent)" }} />
         </div>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--ink)", lineHeight: 1.3 }}>
+          {cur.title}
+        </h2>
+      </div>
 
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginBottom: 18 }}>
-          <div style={{
-            width: 52, height: 52, borderRadius: 16,
-            background: "rgba(217,99,58,.1)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <Ico size={26} stroke={1.5} style={{ color: "var(--accent)" }} />
-          </div>
-          <h2 style={{
-            margin: 0, fontSize: 20, fontWeight: 700,
-            color: "var(--ink)", textAlign: "center", lineHeight: 1.3,
-          }}>{cur.title}</h2>
-        </div>
+      <p style={{
+        margin: "0 0 14px",
+        fontSize: 13, lineHeight: 1.65,
+        color: "var(--ink-2)",
+      }}>{cur.body}</p>
 
-        <p style={{
-          margin: "0 0 24px",
-          fontSize: 14, lineHeight: 1.75,
-          color: "var(--ink-2)", textAlign: "right",
-        }}>{cur.body}</p>
-
-        <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 22 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: 5 }}>
           {TUTORIAL_STEPS.map((_, i) => (
             <div key={i} style={{
-              width: i === step ? 18 : 6, height: 6, borderRadius: 999,
+              width: i === step ? 16 : 5, height: 5, borderRadius: 999,
               background: i === step ? "var(--accent)" : "var(--line)",
               transition: "all .2s ease",
             }} />
           ))}
         </div>
-
-        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: 6 }}>
           {step > 0 && (
             <button
               onClick={() => setStep(s => s - 1)}
               style={{
-                padding: "8px 18px", borderRadius: 10, fontSize: 13,
+                padding: "6px 14px", borderRadius: 8, fontSize: 12,
                 border: "1px solid var(--line)", background: "var(--card)",
                 color: "var(--ink-2)", cursor: "pointer", fontFamily: "inherit",
               }}
@@ -776,7 +771,7 @@ function TutorialModal({ onClose }) {
           <button
             onClick={() => isLast ? onClose() : setStep(s => s + 1)}
             style={{
-              padding: "8px 24px", borderRadius: 10, fontSize: 13,
+              padding: "6px 18px", borderRadius: 8, fontSize: 12,
               border: "none", background: "var(--ink)", color: "var(--paper)",
               fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
             }}
@@ -840,19 +835,21 @@ function AllWrap({ tasks, highlightedId, ...rest }) {
   );
 }
 
-function CaptureBarHost({ onCreate, onStartManual, classifying, captureSeedRef }) {
-  // Forward the parent's seed ref to the CaptureBar; CaptureBar owns the input
-  // state and exposes a setter via this ref.
+function CaptureBarHost({ onCreate, onStartManual, classifying, captureSeedRef, noCourses }) {
   return <window.CaptureBar
     onCreate={onCreate}
     onStartManual={onStartManual}
     classifying={classifying}
     seedRef={captureSeedRef}
+    noCourses={noCourses}
   />;
 }
 
+const _IS_LOCAL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+
 function ViewSwitcher({ view, onChange, tasks }) {
   const { t } = window.useLang();
+  const visibleViews = VIEWS.filter(v => !v.adminOnly || _IS_LOCAL);
   return (
     <div style={{
       display: "flex", gap: 2, padding: 4,
@@ -861,12 +858,12 @@ function ViewSwitcher({ view, onChange, tasks }) {
       borderRadius: 12,
       overflowX: "auto",
     }}>
-      {VIEWS.map((v, i) => {
+      {visibleViews.map((v, i) => {
         const Ico = window.Icon[v.icon];
         const active = view === v.id;
         const label = t(v.labelKey);
         return (
-          <button key={v.id} onClick={() => onChange(v.id)} style={{
+          <button key={v.id} data-tutorial-id={v.id} onClick={() => onChange(v.id)} style={{
             display: "inline-flex", alignItems: "center", gap: 7,
             padding: "8px 14px", borderRadius: 9,
             border: "none",
@@ -949,14 +946,14 @@ function AboutMeEditor() {
           {saveState === "saving" ? t("tweaksSaving") : t("tweaksSave")}
         </button>
         {saveState === "saved" && (
-          <span style={{ fontSize: 12, color: "var(--ink-3)", fontStyle: "italic" }}>✓ {t("tweaksSaved")}</span>
+          <span style={{ fontSize: 12, color: "var(--ink-3)" }}>✓ {t("tweaksSaved")}</span>
         )}
       </div>
     </div>
   );
 }
 
-function TweaksHost({ tw, setTw, user, onOpenHistory }) {
+function TweaksHost({ tw, setTw, user, onOpenHistory, onOpenOnboarding }) {
   const { t } = window.useLang();
   const TP = window.TweaksPanel;
   const TS = window.TweakSection;
@@ -977,14 +974,24 @@ function TweaksHost({ tw, setTw, user, onOpenHistory }) {
             fontSize: 12, color: "var(--ink-3)",
           }}>
             <span style={{ fontFamily: "var(--font-mono)" }}>{user.email}</span>
-            <button
-              onClick={doLogout}
-              style={{
-                padding: "5px 12px", borderRadius: 8, fontSize: 12,
-                border: "1px solid var(--line)", background: "var(--card)",
-                color: "var(--ink-2)", cursor: "pointer", fontFamily: "inherit",
-              }}
-            >{t("logout")}</button>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                onClick={onOpenOnboarding}
+                style={{
+                  padding: "5px 12px", borderRadius: 8, fontSize: 12,
+                  border: "1px solid var(--line)", background: "var(--card)",
+                  color: "var(--ink-2)", cursor: "pointer", fontFamily: "inherit",
+                }}
+              >🎓 הגדרה מחדש</button>
+              <button
+                onClick={doLogout}
+                style={{
+                  padding: "5px 12px", borderRadius: 8, fontSize: 12,
+                  border: "1px solid var(--line)", background: "var(--card)",
+                  color: "var(--ink-2)", cursor: "pointer", fontFamily: "inherit",
+                }}
+              >{t("logout")}</button>
+            </div>
           </div>
         </TS>
       )}
@@ -1085,8 +1092,8 @@ function LoginScreen({ error }) {
         padding: 32,
         textAlign: "center",
       }}>
-        <h1 className="serif" style={{
-          fontSize: 28, fontStyle: "italic", color: "var(--ink)",
+        <h1 style={{
+          fontSize: 28, fontWeight: 700, color: "var(--ink)",
           margin: 0, marginBottom: 8,
         }}>{t("loginTitle")}</h1>
         <p style={{ color: "var(--ink-3)", fontSize: 14, lineHeight: 1.5, margin: "0 0 24px" }}>

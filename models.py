@@ -101,6 +101,7 @@ class PatternUpdate(BaseModel):
     hw_due_time: Optional[str] = None
     default_importance: Optional[int] = Field(default=None, ge=1, le=5)
     default_urgency:    Optional[int] = Field(default=None, ge=1, le=5)
+    weeks_active: Optional[str] = None
 
 
 class PatternCreate(BaseModel):
@@ -118,6 +119,7 @@ class PatternCreate(BaseModel):
     is_required: bool = False
     default_importance: Optional[int] = Field(default=None, ge=1, le=5)
     default_urgency:    Optional[int] = Field(default=None, ge=1, le=5)
+    weeks_active: str = "[1,2,3,4,5,6,7,8,9,10,11,12,13]"
 
 
 # ─── Tasks (virtual or adhoc) — unified API shape ────────────────────
@@ -148,11 +150,13 @@ class TaskUpdate(BaseModel):
     place: Optional[TaskPlace] = None
     importance: Optional[int] = Field(default=None, ge=1, le=5)
     urgency: Optional[int] = Field(default=None, ge=1, le=5)
+    title: Optional[str] = None
+    category_id: Optional[int] = None
 
 
 # ─── Free-text capture ───────────────────────────────────────────────
 class CaptureRequest(BaseModel):
-    text: str
+    text: str = Field(min_length=1, max_length=2000)
     client_now: Optional[str] = None  # ISO datetime with offset, for date anchoring
     # User-provided overrides — when set, take precedence over AI/code defaults.
     importance: Optional[int] = Field(default=None, ge=1, le=5)

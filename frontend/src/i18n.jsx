@@ -31,6 +31,7 @@ const STRINGS = {
     viewAgenda: "Agenda",
     viewCourses: "Courses",
     viewHistory: "History",
+    viewAdmin: "Admin",
 
     // Empty state
     emptyTitle: "nothing here yet —",
@@ -84,14 +85,6 @@ const STRINGS = {
     levelMedium: "medium",
     levelHigh: "high",
 
-    // Suggestions panel
-    suggestionsTitle: "ask the AI",
-    suggestNewDimensions: "Suggest new dimensions",
-    suggestNewDimensionsSub: "find better ways to slice your tasks",
-    suggestConnections: "Suggest connections",
-    suggestConnectionsSub: "find sessions and related tasks",
-    loadingSlow: "this takes 3–8 seconds — calling the model",
-
     // Group bars
     collapseAll: "collapse all",
     expandAll: "expand all",
@@ -124,21 +117,6 @@ const STRINGS = {
     tweaksSaved: "saved",
     tweaksSaving: "saving…",
 
-    // Subjects (translated labels)
-    subj_projects: "projects",
-    subj_money: "money",
-    subj_university: "university",
-    subj_friends: "friends",
-    subj_errands: "errands",
-    subj_health: "health",
-    subj_other: "other",
-
-    // Contexts
-    ctx_phone: "phone",
-    ctx_computer: "computer",
-    ctx_errand: "errand",
-    ctx_home: "home",
-    ctx_anywhere: "anywhere",
   },
 
   he: {
@@ -167,6 +145,7 @@ const STRINGS = {
     viewAgenda: "סדר יום",
     viewCourses: "🎯 קורסים",
     viewHistory: "📚 היסטוריה",
+    viewAdmin: "⚙️ Admin",
 
     emptyTitle: "עדיין אין כלום —",
     emptySubtitle: "תזרקי משהו. כתבי מה שמסתובב לך בראש. אני אבין את הממדים.",
@@ -214,13 +193,6 @@ const STRINGS = {
     levelMedium: "בינוני",
     levelHigh: "גבוה",
 
-    suggestionsTitle: "תשאלי את ה-AI",
-    suggestNewDimensions: "הציעו ממדים חדשים",
-    suggestNewDimensionsSub: "למצוא דרכים טובות יותר לחלק את המשימות",
-    suggestConnections: "הציעו קשרים",
-    suggestConnectionsSub: "למצוא סשנים ומשימות קשורות",
-    loadingSlow: "לוקח 3–8 שניות — קוראים למודל",
-
     collapseAll: "צמצם הכל",
     expandAll: "הרחב הכל",
 
@@ -250,20 +222,6 @@ const STRINGS = {
     tweaksSave: "שמור",
     tweaksSaved: "נשמר",
     tweaksSaving: "שומר…",
-
-    subj_projects: "פרויקטים",
-    subj_money: "כסף",
-    subj_university: "אוניברסיטה",
-    subj_friends: "חברים",
-    subj_errands: "סידורים",
-    subj_health: "בריאות",
-    subj_other: "אחר",
-
-    ctx_phone: "טלפון",
-    ctx_computer: "מחשב",
-    ctx_errand: "בדרך",
-    ctx_home: "בית",
-    ctx_anywhere: "כל מקום",
 
     // EditDialog custom-value flow
     editCustomValueTitle: "ערך מותאם אישית",
@@ -322,6 +280,11 @@ const STRINGS = {
     schDayFri: "שישי",
     schDaySat: "שבת",
     schDayUnset: "—",
+    schFrequency: "תדירות",
+    schEveryWeek: "כל שבוע",
+    schBiweeklyThis: "שבועיים — השבוע",
+    schBiweeklyNext: "שבועיים — שבוע הבא",
+
     schSave: "שמור",
     schCancel: "ביטול",
 

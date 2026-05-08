@@ -1,6 +1,6 @@
 // Capture bar — sticky top, rotating placeholder, "thinking" state
 
-function CaptureBar({ onCreate, onStartManual, classifying, seedRef }) {
+function CaptureBar({ onCreate, onStartManual, classifying, seedRef, noCourses }) {
   const [val, setVal] = React.useState("");
   const [focused, setFocused] = React.useState(false);
   const [pickedImp, setPickedImp] = React.useState(null);  // 5=high, 2=low, null=let system decide
@@ -79,6 +79,31 @@ function CaptureBar({ onCreate, onStartManual, classifying, seedRef }) {
   const Sparkles = window.Icon.Sparkles;
   const CalendarIcon = window.Icon.Calendar;
   const PencilIcon = window.Icon.Pencil;
+
+  if (noCourses) {
+    return (
+      <div style={{
+        position: "sticky", top: 0, zIndex: 20,
+        background: "linear-gradient(to bottom, var(--paper) 70%, rgba(245,241,234,0))",
+        paddingTop: 24, paddingBottom: 28,
+      }}>
+        <div style={{
+          background: "var(--card)",
+          border: "1px dashed var(--line-strong)",
+          borderRadius: 18,
+          padding: "18px 24px",
+          display: "flex", alignItems: "center", gap: 12,
+          color: "var(--ink-3)",
+          fontSize: 14,
+        }}>
+          <Sparkles size={18} stroke={1.7} style={{ flexShrink: 0, color: "var(--accent)" }} />
+          <span>
+            כדי להוסיף משימות, עבור ללשונית <strong style={{ color: "var(--ink-2)" }}>קורסים</strong> וצור לפחות קורס אחד.
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -278,7 +303,7 @@ function CaptureBar({ onCreate, onStartManual, classifying, seedRef }) {
               <PriBtn axis="urg" level={2} label="לא דחוף" />
             </span>
           </div>
-          <span style={{ color: "var(--ink-4)", fontStyle: "italic", fontSize: 11 }}>
+          <span style={{ color: "var(--ink-4)", fontSize: 11 }}>
             לא תבחר ⇒ ייקבע לפי הפרופיל שלך
           </span>
         </div>
@@ -288,9 +313,8 @@ function CaptureBar({ onCreate, onStartManual, classifying, seedRef }) {
             padding: "0 22px 14px",
             fontSize: 12.5, color: "var(--ink-3)",
             display: "flex", alignItems: "center", gap: 8,
-            fontStyle: "italic",
           }}>
-            <span className="serif" style={{ fontSize: 14 }}>{t("thinking")}</span>
+            <span style={{ fontSize: 13 }}>{t("thinking")}</span>
             <span style={{ color: "var(--ink-4)" }}>· {t("classifying")}</span>
           </div>
         )}

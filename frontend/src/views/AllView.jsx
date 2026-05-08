@@ -28,7 +28,7 @@ function EmptyState({ onPick }) {
       display: "flex", flexDirection: "column", alignItems: "center", gap: 18,
       textAlign: "center",
     }}>
-      <div className="serif" style={{ fontSize: 42, fontStyle: "italic", color: "var(--ink-2)", lineHeight: 1.1 }}>
+      <div style={{ fontSize: 36, fontWeight: 700, color: "var(--ink-2)", lineHeight: 1.1 }}>
         {t("emptyTitle")}
       </div>
       <div style={{ fontSize: 15, color: "var(--ink-3)", maxWidth: 400, lineHeight: 1.5 }}>

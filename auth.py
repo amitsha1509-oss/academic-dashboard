@@ -151,7 +151,14 @@ def find_or_create_user(email: str, google_sub: str, name: Optional[str]) -> Use
             "INSERT INTO users(email, google_sub, name) VALUES(?, ?, ?)",
             (email, google_sub, name),
         )
-        row = c.execute("SELECT * FROM users WHERE id=?", (cur.lastrowid,)).fetchone()
+        new_id = cur.lastrowid
+        # Auto-create "כללי" so the app is usable immediately after sign-up.
+        c.execute(
+            "INSERT INTO categories(user_id, name, color_dark, color_mid, color_light, sort_order) "
+            "VALUES(?, ?, ?, ?, ?, ?)",
+            (new_id, "כללי", "6B7280", "9CA3AF", "F3F4F6", 0),
+        )
+        row = c.execute("SELECT * FROM users WHERE id=?", (new_id,)).fetchone()
         return _row_to_user(row)
 
 

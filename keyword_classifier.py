@@ -157,7 +157,10 @@ def classify(text: str, user_keywords: Optional[dict] = None) -> Optional[str]:
     if not text or not text.strip():
         return None
 
-    effective_keywords = user_keywords if user_keywords else KEYWORDS
+    # Never fall back to the hardcoded KEYWORDS dict for other users — a new
+    # user with only "כללי" (no stored keywords) would incorrectly match Amit's
+    # Hebrew course names. Empty dict → all inputs return "כללי" or go to AI.
+    effective_keywords = user_keywords if user_keywords else {}
     matches = _find_categories(text, effective_keywords)
     has_ambig = _has_ambiguous_word(text)
 

@@ -35,7 +35,7 @@ function CalendarView({ tasks, onEdit }) {
         display: "flex", alignItems: "center", gap: 10,
         marginBottom: 16, flexWrap: "wrap",
       }}>
-        <span className="serif" style={{ fontSize: 26, fontStyle: "italic", color: "var(--ink)", flex: 1, minWidth: 180 }}>
+        <span style={{ fontSize: 20, fontWeight: 700, color: "var(--ink)", flex: 1, minWidth: 180 }}>
           {monthLabel}
         </span>
         <div style={{ display: "flex", gap: 4 }}>
@@ -164,7 +164,7 @@ function MonthGrid({ cursor, tasks, onEdit, locale = [] }) {
                   <CalPill key={t.id} task={t} onClick={() => onEdit?.(t)} />
                 ))}
                 {items.length > 3 && (
-                  <span style={{ fontSize: 10, color: "var(--ink-3)", paddingInlineStart: 4, fontStyle: "italic" }}>
+                  <span style={{ fontSize: 10, color: "var(--ink-3)", paddingInlineStart: 4 }}>
                     +{items.length - 3} more
                   </span>
                 )}

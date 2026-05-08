@@ -10,7 +10,7 @@
 const SCHEDULE_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const SCHEDULE_KINDS = ["lecture", "tutorial", "hw", "reading"];
 
-function ScheduleView() {
+function ScheduleView({ onCoursesChanged } = {}) {
   const { t } = window.useLang();
   const [patterns, setPatterns] = React.useState(null);
   const [categories, setCategories] = React.useState(null);
@@ -82,6 +82,7 @@ function ScheduleView() {
       const created = await window.claudeAPI.createCategory(payload);
       setCategories(cs => [...cs, created].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)));
       setAddingCourse(false);
+      onCoursesChanged?.();
     } catch (e) {
       window.showToast(t("alertCreateFailed") + ": " + e.message);
     }
@@ -209,7 +210,7 @@ function ScheduleView() {
           >
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {groupPats.length === 0 ? (
-                <div style={{ padding: 12, fontSize: 12.5, color: "var(--ink-3)", fontStyle: "italic" }}>
+                <div style={{ padding: 12, fontSize: 12.5, color: "var(--ink-3)" }}>
                   {t("schEmpty")}
                 </div>
               ) : (
@@ -350,38 +351,25 @@ function PatternRow({ pattern, onLocalPatch, onSendPatch, onDelete, confirming }
       </div>
 
       {isHw && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
-          <Field label={t("schHwReleaseDay")}>
-            <DaySelect value={pattern.hw_release_day} onChange={(v) => immediatePatch({ hw_release_day: v || null })} />
-          </Field>
-          <Field label={t("schHwReleaseTime")}>
-            <input
-              type="time"
-              value={pattern.hw_release_time || ""}
-              onChange={(e) => debouncedPatch({ hw_release_time: e.target.value || null })}
-              style={inputStyle(110)}
-            />
-          </Field>
-          <Field label={t("schHwDueOffsetDays")}>
-            <input
-              type="number"
-              min="0" max="14"
-              value={pattern.hw_due_offset_days ?? ""}
-              onChange={(e) => {
-                const n = e.target.value === "" ? null : Math.max(0, Math.min(14, parseInt(e.target.value, 10) || 0));
-                debouncedPatch({ hw_due_offset_days: n });
-              }}
-              style={inputStyle(80)}
-            />
-          </Field>
-          <Field label={t("schHwDueTime")}>
-            <input
-              type="time"
-              value={pattern.hw_due_time || ""}
-              onChange={(e) => debouncedPatch({ hw_due_time: e.target.value || null })}
-              style={inputStyle(110)}
-            />
-          </Field>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", background: "var(--paper)", borderRadius: 8, border: "1px solid var(--line)" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+            <span style={{ fontSize: 12, color: "var(--accent)", fontWeight: 600, alignSelf: "flex-end", paddingBottom: 5, whiteSpace: "nowrap" }}>📅 מתי מתפרסם:</span>
+            <Field label="יום">
+              <DaySelect value={pattern.hw_release_day} onChange={(v) => immediatePatch({ hw_release_day: v || null })} />
+            </Field>
+            <Field label="שעה">
+              <input type="time" value={pattern.hw_release_time || ""} onChange={(e) => debouncedPatch({ hw_release_time: e.target.value || null })} style={inputStyle(110)} />
+            </Field>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", borderTop: "1px solid var(--line)", paddingTop: 6 }}>
+            <span style={{ fontSize: 12, color: "var(--ink-3)", fontWeight: 600, alignSelf: "flex-end", paddingBottom: 5, whiteSpace: "nowrap" }}>⏰ מתי להגיש:</span>
+            <Field label="כמה ימים אחרי">
+              <input type="number" min="0" max="14" value={pattern.hw_due_offset_days ?? ""} onChange={(e) => { const n = e.target.value === "" ? null : Math.max(0, Math.min(14, parseInt(e.target.value, 10) || 0)); debouncedPatch({ hw_due_offset_days: n }); }} style={inputStyle(80)} />
+            </Field>
+            <Field label="שעה">
+              <input type="time" value={pattern.hw_due_time || ""} onChange={(e) => debouncedPatch({ hw_due_time: e.target.value || null })} style={inputStyle(110)} />
+            </Field>
+          </div>
         </div>
       )}
 
@@ -413,6 +401,10 @@ function PatternRow({ pattern, onLocalPatch, onSendPatch, onDelete, confirming }
           />
           {t("schRequired")}
         </label>
+        <FrequencyPicker
+          weeksActive={pattern.weeks_active}
+          onChange={(json) => immediatePatch({ weeks_active: json })}
+        />
 
         <button
           onClick={onDelete}
@@ -445,12 +437,17 @@ function NewPatternForm({ categoryId, onCancel, onCreate }) {
     is_required: false,
     default_importance: null,
     default_urgency: null,
+    weeks_active: _ALL_WEEKS,
   });
 
   const isHw = draft.kind === "hw" || draft.kind === "reading";
   const set = (fields) => setDraft(d => ({ ...d, ...fields }));
 
   const submit = () => {
+    if (!draft.day_of_week) {
+      window.showToast("יש לבחור יום לפני השמירה");
+      return;
+    }
     const payload = { ...draft };
     // Strip empty strings → null so backend Pydantic Optional/null check is happy.
     for (const k of Object.keys(payload)) {
@@ -504,38 +501,44 @@ function NewPatternForm({ categoryId, onCancel, onCreate }) {
       </div>
 
       {isHw && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
-          <Field label={t("schHwReleaseDay")}>
-            <DaySelect value={draft.hw_release_day} onChange={(v) => set({ hw_release_day: v || null })} />
-          </Field>
-          <Field label={t("schHwReleaseTime")}>
-            <input
-              type="time"
-              value={draft.hw_release_time || ""}
-              onChange={(e) => set({ hw_release_time: e.target.value || null })}
-              style={inputStyle(110)}
-            />
-          </Field>
-          <Field label={t("schHwDueOffsetDays")}>
-            <input
-              type="number"
-              min="0" max="14"
-              value={draft.hw_due_offset_days ?? ""}
-              onChange={(e) => {
-                const n = e.target.value === "" ? null : Math.max(0, Math.min(14, parseInt(e.target.value, 10) || 0));
-                set({ hw_due_offset_days: n });
-              }}
-              style={inputStyle(80)}
-            />
-          </Field>
-          <Field label={t("schHwDueTime")}>
-            <input
-              type="time"
-              value={draft.hw_due_time || ""}
-              onChange={(e) => set({ hw_due_time: e.target.value || null })}
-              style={inputStyle(110)}
-            />
-          </Field>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px 12px", background: "var(--paper)", borderRadius: 8, border: "1px solid var(--line)" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+            <span style={{ fontSize: 12, color: "var(--accent)", fontWeight: 600, alignSelf: "flex-end", paddingBottom: 5, whiteSpace: "nowrap" }}>📅 מתי מתפרסם:</span>
+            <Field label="יום">
+              <DaySelect value={draft.hw_release_day} onChange={(v) => set({ hw_release_day: v || null })} />
+            </Field>
+            <Field label="שעה">
+              <input
+                type="time"
+                value={draft.hw_release_time || ""}
+                onChange={(e) => set({ hw_release_time: e.target.value || null })}
+                style={inputStyle(110)}
+              />
+            </Field>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", borderTop: "1px solid var(--line)", paddingTop: 6 }}>
+            <span style={{ fontSize: 12, color: "var(--ink-3)", fontWeight: 600, alignSelf: "flex-end", paddingBottom: 5, whiteSpace: "nowrap" }}>⏰ מתי להגיש:</span>
+            <Field label="כמה ימים אחרי">
+              <input
+                type="number"
+                min="0" max="14"
+                value={draft.hw_due_offset_days ?? ""}
+                onChange={(e) => {
+                  const n = e.target.value === "" ? null : Math.max(0, Math.min(14, parseInt(e.target.value, 10) || 0));
+                  set({ hw_due_offset_days: n });
+                }}
+                style={inputStyle(80)}
+              />
+            </Field>
+            <Field label="שעה">
+              <input
+                type="time"
+                value={draft.hw_due_time || ""}
+                onChange={(e) => set({ hw_due_time: e.target.value || null })}
+                style={inputStyle(110)}
+              />
+            </Field>
+          </div>
         </div>
       )}
 
@@ -567,6 +570,10 @@ function NewPatternForm({ categoryId, onCancel, onCreate }) {
           />
           {t("schRequired")}
         </label>
+        <FrequencyPicker
+          weeksActive={draft.weeks_active}
+          onChange={(json) => set({ weeks_active: json })}
+        />
       </div>
 
       <div style={{ display: "flex", gap: 8, marginInlineStart: "auto" }}>
@@ -588,6 +595,81 @@ function NewPatternForm({ categoryId, onCancel, onCreate }) {
         >{t("schSave")}</button>
       </div>
     </div>
+  );
+}
+
+// ─── Frequency picker (every week / bi-weekly this week / bi-weekly next week) ──
+const _ALL_WEEKS  = "[1,2,3,4,5,6,7,8,9,10,11,12,13]";
+const _ODD_WEEKS  = "[1,3,5,7,9,11,13]";
+const _EVEN_WEEKS = "[2,4,6,8,10,12]";
+
+// Semester start — must match compute.py's default (2026-04-06 = week 1 Monday).
+// UTC noon = safe for all timezones (±12h offset still lands on Apr 6).
+const _SEM_START = new Date("2026-04-06T12:00:00Z");
+
+function _currentSemWeek() {
+  const now = new Date(window.NOW || Date.now());
+  const days = Math.floor((now - _SEM_START) / (1000 * 60 * 60 * 24));
+  return Math.max(1, Math.floor(days / 7) + 1);
+}
+
+// Returns the weeks_active JSON for "this week" and "next week" based on
+// whether the current semester week is odd or even.
+function _thisWeekJson() {
+  return _currentSemWeek() % 2 === 1 ? _ODD_WEEKS : _EVEN_WEEKS;
+}
+function _nextWeekJson() {
+  return _currentSemWeek() % 2 === 1 ? _EVEN_WEEKS : _ODD_WEEKS;
+}
+
+// "weekly" | "this" | "next"
+function _detectFreq(weeksActive) {
+  try {
+    const ws = JSON.parse(weeksActive || _ALL_WEEKS);
+    if (!ws || ws.length >= 13) return "weekly";
+    const allOdd  = ws.every(w => w % 2 === 1);
+    const allEven = ws.every(w => w % 2 === 0);
+    if (!allOdd && !allEven) return "weekly";
+    const curIsOdd = _currentSemWeek() % 2 === 1;
+    // "this" = the pattern fires in the current week
+    if (allOdd)  return curIsOdd  ? "this" : "next";
+    if (allEven) return !curIsOdd ? "this" : "next";
+  } catch (_) {}
+  return "weekly";
+}
+
+function FrequencyPicker({ weeksActive, onChange }) {
+  const { t } = window.useLang();
+  const freq = _detectFreq(weeksActive);
+  const Btn = ({ k, label }) => {
+    const active = freq === k;
+    return (
+      <button
+        onClick={() => {
+          const json = k === "weekly" ? _ALL_WEEKS
+                     : k === "this"   ? _thisWeekJson()
+                     :                  _nextWeekJson();
+          onChange(json);
+        }}
+        style={{
+          padding: "4px 10px", borderRadius: 999, fontSize: 11.5,
+          border: active ? "2px solid transparent" : "1.5px solid var(--line-strong)",
+          background: active ? "var(--ink)" : "var(--card)",
+          color: active ? "var(--paper)" : "var(--ink-2)",
+          fontWeight: active ? 600 : 400,
+          cursor: "pointer", fontFamily: "inherit",
+          transition: "all .12s",
+        }}
+      >{label}</button>
+    );
+  };
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ink-2)" }}>
+      {t("schFrequency")}:
+      <Btn k="weekly" label={t("schEveryWeek")} />
+      <Btn k="this"   label={t("schBiweeklyThis")} />
+      <Btn k="next"   label={t("schBiweeklyNext")} />
+    </span>
   );
 }
 

@@ -21,7 +21,14 @@ from contextlib import contextmanager
 from pathlib import Path
 
 # Production may set DB_PATH to a mounted volume (e.g. /var/data/academic.sqlite3).
-DB_PATH = Path(os.environ.get("DB_PATH") or (Path(__file__).parent / "academic.sqlite3"))
+# RAILWAY_VOLUME_MOUNT_PATH is injected automatically by Railway when a volume is attached.
+_db_path_env = os.environ.get("DB_PATH", "").strip()
+_vol_mount = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH", "").strip()
+DB_PATH = Path(
+    _db_path_env or
+    (f"{_vol_mount}/academic.sqlite3" if _vol_mount else "") or
+    str(Path(__file__).parent / "academic.sqlite3")
+)
 
 # Schema for fresh DB initialization. Existing DBs are migrated additively in init_db().
 SCHEMA = """

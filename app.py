@@ -9,6 +9,7 @@ Per BUILDING_PRINCIPLES.md "Modular architecture":
 
 Run: uvicorn app:app --reload --port 8001
 """
+import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -117,11 +118,10 @@ def auth_dev_users():
     return auth.dev_users()
 
 
-# ─── Static UI mounts (placeholders — populated in Phase 4 / 5) ─────
+# ─── Static UI mounts ────────────────────────────────────────────────
 STATIC_DIR = Path(__file__).parent / "static"
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 STATIC_DIR.mkdir(exist_ok=True)
-FRONTEND_DIR.mkdir(exist_ok=True)
 
 class NoCacheStaticFiles(StaticFiles):
     """Serve static files with Cache-Control: no-cache so Babel-in-browser
@@ -182,6 +182,10 @@ def create_category(
     user: auth.User = Depends(auth.get_current_user),
 ):
     data = payload.model_dump(exclude_unset=True)
+    if "name" in data:
+        data["name"] = data["name"].strip()
+    if not data.get("name"):
+        raise HTTPException(400, "name cannot be empty")
     data["user_id"] = user.id
     cols = list(data.keys())
     placeholders = ", ".join("?" for _ in cols)
@@ -222,6 +226,10 @@ def update_category(
     fields = payload.model_dump(exclude_unset=True)
     if not fields:
         raise HTTPException(400, "no fields to update")
+    if "name" in fields:
+        fields["name"] = fields["name"].strip()
+        if not fields["name"]:
+            raise HTTPException(400, "name cannot be empty")
     bad = set(fields) - _CATEGORY_FIELDS
     if bad:
         raise HTTPException(400, f"unknown fields: {sorted(bad)}")
@@ -379,7 +387,7 @@ def list_patterns(user: auth.User = Depends(auth.get_current_user)):
 _PATTERN_FIELDS = {
     "is_required", "label", "day_of_week", "start_time", "end_time",
     "hw_release_day", "hw_release_time", "hw_due_offset_days", "hw_due_time",
-    "default_importance", "default_urgency",
+    "default_importance", "default_urgency", "weeks_active",
 }
 
 
@@ -538,6 +546,11 @@ def capture_task(
                 502,
                 "תקלה בזיהוי המשימה. נסה לנסח אחרת או להוסיף מילת מפתח ברורה.",
             )
+        except RuntimeError:
+            raise HTTPException(
+                502,
+                "תקלה בזיהוי המשימה. נסה לנסח אחרת או להוסיף מילת מפתח ברורה.",
+            )
 
         category_name = classified.category_name
         # Defense-in-depth: AI may hallucinate a category the user doesn't have.
@@ -564,7 +577,11 @@ def capture_task(
         except ValueError:
             pass  # malformed ISO string — keep whatever AI set
 
-    cat_id = user_cat_by_name[category_name]
+    cat_id = user_cat_by_name.get(category_name)
+    if cat_id is None:
+        print(f"[WARN] category {category_name!r} not in user {user.id}'s map; falling back")
+        category_name = user_cat_names[0]
+        cat_id = user_cat_by_name[category_name]
     with db.connect() as c:
         cur = c.execute(
             """INSERT INTO adhoc_tasks(
@@ -706,14 +723,19 @@ def _parse_task_id(task_id: str) -> tuple[str, ...]:
     """'r:5:2026-04-28' → ('r', 5, date(2026,4,28))
        'a:42'           → ('a', 42)"""
     parts = task_id.split(":")
-    if len(parts) == 3 and parts[0] == "r":
-        return ("r", int(parts[1]), parts[2])  # keep date as ISO string for SQL
-    if len(parts) == 2 and parts[0] == "a":
-        return ("a", int(parts[1]))
+    try:
+        if len(parts) == 3 and parts[0] == "r":
+            return ("r", int(parts[1]), parts[2])  # keep date as ISO string for SQL
+        if len(parts) == 2 and parts[0] == "a":
+            return ("a", int(parts[1]))
+    except ValueError:
+        pass
     raise HTTPException(400, f"invalid task id: {task_id}")
 
 
-_TASK_UPDATE_COLUMNS = {"status", "notes", "scheduled_at", "importance", "urgency", "place"}
+_TASK_UPDATE_COLUMNS = {"status", "notes", "scheduled_at", "importance", "urgency", "place", "title", "category_id"}
+# completions table has no title/category_id — filter these out for recurring tasks
+_COMPLETION_UPDATE_COLUMNS = {"status", "notes", "scheduled_at", "importance", "urgency", "place"}
 
 
 @app.patch("/tasks/{task_id}")
@@ -739,6 +761,16 @@ def update_task(
 
     if parts[0] == "r":
         _, pattern_id, occ_date = parts
+        # completions only stores occurrence-level overrides — title/category_id
+        # live on the pattern itself and can't be changed per-occurrence.
+        completion_fields = {k: v for k, v in fields.items() if k in _COMPLETION_UPDATE_COLUMNS}
+        unsupported = {k for k in fields if k not in _COMPLETION_UPDATE_COLUMNS}
+        if unsupported:
+            raise HTTPException(
+                400,
+                f"fields {sorted(unsupported)} cannot be changed on recurring tasks; "
+                "use status / notes / importance / urgency / place / scheduled_at",
+            )
         with db.connect() as c:
             # Authorization: pattern must belong to this user.
             pat = c.execute(
@@ -748,33 +780,41 @@ def update_task(
             if not pat:
                 raise HTTPException(404, "task not found")
 
-            existing = c.execute(
-                "SELECT 1 FROM completions WHERE pattern_id=? AND occurrence_date=? AND user_id=?",
-                (pattern_id, occ_date, user.id),
-            ).fetchone()
-            if existing:
-                sets = ", ".join(f"{k}=?" for k in fields)
-                vals = list(fields.values()) + [pattern_id, occ_date, user.id]
-                c.execute(
-                    f"UPDATE completions SET {sets}, updated_at=CURRENT_TIMESTAMP "
-                    "WHERE pattern_id=? AND occurrence_date=? AND user_id=?",
-                    vals,
-                )
-            else:
-                cols = ["user_id", "pattern_id", "occurrence_date"] + list(fields.keys())
-                placeholders = ", ".join("?" * len(cols))
-                vals = [user.id, pattern_id, occ_date] + list(fields.values())
-                c.execute(
-                    f"INSERT INTO completions({', '.join(cols)}) VALUES({placeholders})",
-                    vals,
-                )
-        return {"id": task_id, "updated": list(fields.keys())}
+            if completion_fields:
+                existing = c.execute(
+                    "SELECT 1 FROM completions WHERE pattern_id=? AND occurrence_date=? AND user_id=?",
+                    (pattern_id, occ_date, user.id),
+                ).fetchone()
+                if existing:
+                    sets = ", ".join(f"{k}=?" for k in completion_fields)
+                    vals = list(completion_fields.values()) + [pattern_id, occ_date, user.id]
+                    c.execute(
+                        f"UPDATE completions SET {sets}, updated_at=CURRENT_TIMESTAMP "
+                        "WHERE pattern_id=? AND occurrence_date=? AND user_id=?",
+                        vals,
+                    )
+                else:
+                    cols = ["user_id", "pattern_id", "occurrence_date"] + list(completion_fields.keys())
+                    placeholders = ", ".join("?" * len(cols))
+                    vals = [user.id, pattern_id, occ_date] + list(completion_fields.values())
+                    c.execute(
+                        f"INSERT INTO completions({', '.join(cols)}) VALUES({placeholders})",
+                        vals,
+                    )
+        return {"id": task_id, "updated": list(completion_fields.keys())}
 
     # adhoc
     _, adhoc_id = parts
     sets = ", ".join(f"{k}=?" for k in fields)
     vals = list(fields.values()) + [adhoc_id, user.id]
     with db.connect() as c:
+        if "category_id" in fields and fields["category_id"] is not None:
+            exists = c.execute(
+                "SELECT 1 FROM categories WHERE id=? AND user_id=?",
+                (fields["category_id"], user.id),
+            ).fetchone()
+            if not exists:
+                raise HTTPException(422, "invalid category_id")
         cur = c.execute(
             f"UPDATE adhoc_tasks SET {sets} WHERE id=? AND user_id=?",
             vals,
@@ -833,6 +873,23 @@ def submit_feedback(
     return {"id": cur.lastrowid, "ok": True}
 
 
+@app.post("/admin/db-restore")
+async def admin_db_restore(request: Request):
+    """One-time DB upload. Protected by RESTORE_SECRET env var (not session auth).
+    Delete the env var after use — endpoint becomes permanently forbidden."""
+    secret = request.headers.get("x-restore-secret", "")
+    expected = os.environ.get("RESTORE_SECRET", "")
+    if not expected or secret != expected:
+        raise HTTPException(403, "forbidden")
+    data = await request.body()
+    if len(data) < 1024:
+        raise HTTPException(400, "body too small — not a valid SQLite file")
+    tmp = db.DB_PATH.parent / "academic_restore_tmp.sqlite3"
+    tmp.write_bytes(data)
+    tmp.rename(db.DB_PATH)
+    return {"wrote_bytes": len(data), "path": str(db.DB_PATH)}
+
+
 @app.get("/admin/db-backup")
 def admin_db_backup(user: auth.User = Depends(auth.get_current_user)):
     from fastapi.responses import FileResponse
@@ -881,3 +938,120 @@ def admin_list_feedback(user: auth.User = Depends(auth.get_current_user)):
             "ORDER BY f.created_at DESC, f.id DESC"
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+@app.get("/admin/overview")
+def admin_overview(user: auth.User = Depends(auth.get_current_user)):
+    """All users with aggregate stats. Admin only."""
+    if user.id != ADMIN_USER_ID:
+        raise HTTPException(403, "admin only")
+    with db.connect() as c:
+        rows = c.execute("""
+            SELECT u.id, u.email, u.name, u.created_at,
+                   COUNT(DISTINCT cat.id)                                          AS course_count,
+                   COUNT(DISTINCT p.id)                                            AS pattern_count,
+                   COUNT(DISTINCT CASE WHEN t.status='open' THEN t.id END)        AS tasks_open,
+                   COUNT(DISTINCT CASE WHEN t.status='done' THEN t.id END)        AS tasks_done
+            FROM users u
+            LEFT JOIN categories cat ON cat.user_id = u.id
+            LEFT JOIN recurring_patterns p  ON p.user_id  = u.id
+            LEFT JOIN adhoc_tasks t         ON t.user_id  = u.id
+            GROUP BY u.id
+            ORDER BY u.created_at DESC
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/admin/users/{target_id}/reset")
+def admin_reset_user(target_id: int, user: auth.User = Depends(auth.get_current_user)):
+    """Wipe all data for target_id. Keeps the user row so they can log back in. Admin only."""
+    if user.id != ADMIN_USER_ID:
+        raise HTTPException(403, "admin only")
+    if target_id == ADMIN_USER_ID:
+        raise HTTPException(400, "cannot reset admin account")
+    with db.connect() as c:
+        exists = c.execute("SELECT 1 FROM users WHERE id=?", (target_id,)).fetchone()
+        if not exists:
+            raise HTTPException(404, f"user {target_id} not found")
+
+        c.execute("DELETE FROM adhoc_tasks       WHERE user_id=?", (target_id,))
+        c.execute("DELETE FROM completions        WHERE user_id=?", (target_id,))
+        c.execute("DELETE FROM recurring_patterns WHERE user_id=?", (target_id,))
+        c.execute("DELETE FROM categories         WHERE user_id=?", (target_id,))
+        c.execute("DELETE FROM settings           WHERE user_id=?", (target_id,))
+        # Recreate the default "כללי" catch-all so the user isn't stuck on first load
+        c.execute(
+            "INSERT INTO categories(user_id, name, sort_order) VALUES (?,?,?)",
+            (target_id, "כללי", 0),
+        )
+    print(f"[admin] user {target_id} reset by admin {user.id}")
+    return {"ok": True, "user_id": target_id}
+
+
+_ADMIN_PANEL_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admin Panel — Academic Dashboard</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;background:#f4f4f5;padding:32px;color:#18181b}
+  h2{margin-bottom:20px;font-size:20px}
+  #wrap{background:white;border-radius:10px;box-shadow:0 1px 6px rgba(0,0,0,.1);overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:10px 16px;text-align:left;border-bottom:1px solid #f1f5f9;font-size:13.5px}
+  th{background:#1e293b;color:#f8fafc;font-weight:600;font-size:12.5px;letter-spacing:.03em}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#f8fafc}
+  .reset-btn{padding:4px 12px;border-radius:5px;border:none;cursor:pointer;font-size:12px;
+    background:#dc2626;color:white;font-weight:600}
+  .reset-btn:hover{background:#b91c1c}
+  #msg{margin-top:14px;padding:10px 16px;border-radius:6px;font-size:13.5px;display:none}
+  .ok{background:#dcfce7;color:#15803d} .err{background:#fee2e2;color:#dc2626}
+  #reload{margin-bottom:16px;padding:6px 14px;border-radius:6px;border:1px solid #cbd5e1;
+    background:white;cursor:pointer;font-size:13px}
+</style>
+</head>
+<body>
+<h2>&#127891; Admin Panel</h2>
+<button id="reload" onclick="load()">&#8635; Refresh</button>
+<div id="wrap"><em style="padding:16px;display:block">Loading…</em></div>
+<div id="msg"></div>
+<script>
+async function load(){
+  const wrap=document.getElementById('wrap');
+  wrap.innerHTML='<em style="padding:16px;display:block">Loading…</em>';
+  const r=await fetch('/admin/overview',{credentials:'include'});
+  if(!r.ok){wrap.innerHTML='<b style="padding:16px;display:block;color:red">Error '+r.status+' — sign in as admin first at <a href="/app">/app</a></b>';return;}
+  const data=await r.json();
+  if(!data.length){wrap.innerHTML='<em style="padding:16px;display:block">No users yet.</em>';return;}
+  let h='<table><tr><th>ID</th><th>Email</th><th>Name</th><th>Joined</th><th>Courses</th><th>Patterns</th><th>Tasks open/done</th><th></th></tr>';
+  for(const u of data){
+    const joined=(u.created_at||'').slice(0,10);
+    const reset=u.id!==1?`<button class="reset-btn" onclick="resetUser(${u.id},'${(u.name||u.email||'user').replace(/'/g,'')}')" >Reset</button>`:'<em style="color:#94a3b8;font-size:12px">admin</em>';
+    h+=`<tr><td>${u.id}</td><td>${u.email||''}</td><td>${u.name||''}</td><td>${joined}</td><td>${u.course_count}</td><td>${u.pattern_count}</td><td>${u.tasks_open} / ${u.tasks_done}</td><td>${reset}</td></tr>`;
+  }
+  h+='</table>';
+  wrap.innerHTML=h;
+}
+async function resetUser(id,name){
+  if(!confirm('Reset '+name+'?\\nThis will delete ALL their tasks, courses, and schedule.\\nThey can log back in and start fresh.'))return;
+  const msg=document.getElementById('msg');
+  msg.style.display='none';
+  const r=await fetch('/admin/users/'+id+'/reset',{method:'POST',credentials:'include'});
+  msg.style.display='block';
+  if(r.ok){msg.className='ok';msg.textContent=name+' was reset successfully.';load();}
+  else{msg.className='err';msg.textContent='Error '+r.status;}
+}
+load();
+</script>
+</body>
+</html>"""
+
+
+@app.get("/admin", response_class=HTMLResponse, include_in_schema=False)
+def admin_panel(user: auth.User = Depends(auth.get_current_user)):
+    """Simple HTML admin panel. Sign in to /app first, then navigate here."""
+    if user.id != ADMIN_USER_ID:
+        raise HTTPException(403, "admin only")
+    return HTMLResponse(_ADMIN_PANEL_HTML)

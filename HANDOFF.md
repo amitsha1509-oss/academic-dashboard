@@ -692,3 +692,572 @@ http://localhost:8001/app
 ```
 
 End of session 9 handoff.
+
+---
+
+## 16. Session 10 — what changed (2026-05-05)
+
+### Production deployment on Railway — LIVE
+
+**Production URL:** `https://academic-dashboard-production-d0d5.up.railway.app`
+
+Railway was chosen over Render (~$25/mo with disk) because it's usage-based (~$5/mo free trial then cheap).
+
+#### Infrastructure
+
+| What | Where | Notes |
+|------|-------|-------|
+| Platform | Railway | `railway.toml` in project root |
+| Builder | Custom Dockerfile | Nixpacks v1.41 had a blank-ENV bug; Dockerfile is stable |
+| Persistent volume | `/var/data/` | Mounted by Railway. DB lives at `/var/data/academic.sqlite3` |
+| DB_PATH env var | `/var/data/academic.sqlite3` | Set in Railway dashboard |
+| PORT | Set by Railway | Dockerfile CMD uses `${PORT:-8000}` |
+
+#### Files added this session
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile` | `python:3.10-slim`, pip install, COPY, uvicorn CMD |
+| `railway.toml` | `builder=DOCKERFILE`, `healthcheckPath=/healthz`, `restartPolicyType=ON_FAILURE` |
+| `Procfile` | Fallback for platforms that use it |
+| `.railwayignore` | Prevents `.env`, `*.sqlite3`, `node_modules/` etc. from being uploaded |
+| `render.yaml` | Not used (created during Render evaluation, kept for reference) |
+| `runtime.txt` | Python version pin (Render fallback) |
+
+#### How to deploy
+
+```powershell
+# From project root, after railway login:
+railway up --detach
+```
+
+This uploads code directly from your machine (bypasses GitHub auto-deploy). `--detach` returns immediately after upload; build runs in Railway cloud. Build URL is printed — open it to watch logs.
+
+**Do NOT use "Redeploy" in the Railway UI.** It reuses the old build snapshot. Always `railway up`.
+
+#### Env vars in Railway
+
+All set via `railway variables set "KEY=VALUE"`. Current vars:
+- `DB_PATH=/var/data/academic.sqlite3`
+- `BASE_URL=https://academic-dashboard-production-d0d5.up.railway.app`
+- `GOOGLE_OAUTH_CLIENT_ID=...` (the real production client)
+- `GOOGLE_OAUTH_CLIENT_SECRET=...`
+- `SESSION_SECRET=...`
+- `GROQ_API_KEY=...`
+- `DEV_MODE=0` (implicit — not set = 0)
+- `RESTORE_SECRET=nucleus-restore-2026` ← **DELETE THIS after uploading the DB** (see §DB upload below)
+
+---
+
+### Google OAuth — WORKING in production
+
+Sign in with Google works at the production URL. Client ID set correctly via Railway CLI (not the Railway dashboard text field which adds a `%0A` newline).
+
+**Footgun discovered:** The Railway dashboard's env var text field appends a newline (`%0A`) to pasted values. Always use `railway variables set "KEY=VALUE"` from the CLI, never paste into the dashboard.
+
+---
+
+### Daily automated backups — ACTIVE
+
+`APScheduler` runs in the FastAPI process and creates `backups/academic-YYYY-MM-DD.sqlite3` every 24h (also on startup). Keeps the 7 most recent. Stored at `/var/data/backups/`.
+
+**Admin endpoints (admin = user_id 1, i.e., Amit):**
+
+| Endpoint | What |
+|----------|------|
+| `GET /admin/db-backup` | Download the live DB as a file |
+| `GET /admin/backups` | List all daily backups (name + size) |
+| `GET /admin/backups/{filename}` | Download a specific daily backup |
+
+To manually download the production DB: sign in, then open `https://academic-dashboard-production-d0d5.up.railway.app/admin/db-backup` in the browser.
+
+---
+
+### Frontend fix — Vite frontend now served in production
+
+**Root cause of English categories / "additional steps" bugs:** Production was serving the OLD babel frontend (`frontend/`) which had a mock English classifier (subjects: "university", "friends", "money", etc.) and a `next_steps` feature. The new Vite frontend (`frontend-vite/dist/`) was built but never wired up.
+
+**Fix:** 1 line in `app.py` — `FRONTEND_DIR` now points to `frontend-vite/dist` if it exists, otherwise falls back to `frontend/`.
+
+**The Vite frontend IS the production UI.** The old `frontend/` is still on disk but is ignored in production (Vite dist takes priority).
+
+**New user UX:** When a new user adds a task before creating any courses, they now get a Hebrew error toast with a "לקורסים ←" action button that navigates them to the Courses tab. (Before: old frontend silently created English-named task subjects.)
+
+---
+
+### DB upload — NEEDS RE-UPLOAD ⚠️
+
+The DB was uploaded during this session but landed in `/app/academic.sqlite3` (ephemeral) instead of `/var/data/academic.sqlite3` (persistent volume). This was a DB_PATH env var pickup issue.
+
+**Fix deployed:** `db.py` now also checks `RAILWAY_VOLUME_MOUNT_PATH` (auto-set by Railway when a volume is attached) as a second fallback, so it will always find the persistent volume even if `DB_PATH` env var has issues.
+
+**After the current build finishes, re-upload your DB:**
+
+```powershell
+$bytes = [System.IO.File]::ReadAllBytes("C:\Users\amit shani\academic_dashboard\academic.sqlite3")
+Invoke-WebRequest `
+  -Uri "https://academic-dashboard-production-d0d5.up.railway.app/admin/db-restore" `
+  -Method POST `
+  -Headers @{ "x-restore-secret" = "nucleus-restore-2026" } `
+  -Body $bytes `
+  -ContentType "application/octet-stream" `
+  -UseBasicParsing
+```
+
+Expected response: `{"wrote_bytes": 98304, "path": "/var/data/academic.sqlite3"}`
+
+If path is still `/app/academic.sqlite3`: contact next Claude session to investigate why RAILWAY_VOLUME_MOUNT_PATH isn't set.
+
+After successful upload:
+1. Sign in → verify your courses appear
+2. **Delete the RESTORE_SECRET env var:**
+   ```powershell
+   railway variables delete RESTORE_SECRET
+   ```
+   (Endpoint becomes permanently forbidden — no redeploy needed.)
+
+---
+
+### How to start locally (UPDATED)
+
+The active local UI is still the OLD frontend at `/app/`. The Vite build is production-only.
+
+```powershell
+# Backend
+cd "C:\Users\amit shani\academic_dashboard"
+.venv\Scripts\python.exe -m uvicorn app:app --port 8001
+
+# Open browser
+http://localhost:8001/app
+```
+
+For Vite dev (if working on frontend code):
+```powershell
+cd "C:\Users\amit shani\academic_dashboard\frontend-vite"
+npm run dev
+# Open: http://localhost:5173
+```
+
+### Files changed (session 10)
+
+- `app.py`
+  - `+import os`
+  - `FRONTEND_DIR` now points to `frontend-vite/dist` if it exists (serves Vite in production)
+  - `+POST /admin/db-restore` temporary endpoint (protected by `RESTORE_SECRET` env var)
+  - `+_backup_db()` + APScheduler daily backup
+  - `+GET /admin/db-backup`, `+GET /admin/backups`, `+GET /admin/backups/{filename}`
+- `requirements.txt` — `+apscheduler==3.10.4`
+- `frontend-vite/src/App.tsx` — no-courses error toast now has "לקורסים ←" action button
+- `frontend-vite/dist/` — rebuilt with the above change
+- `Dockerfile`, `railway.toml`, `Procfile`, `.railwayignore` — new deploy files
+- `.gitignore` — `+backups/`
+- `runtime.txt` — new
+
+### Open items after this session
+
+- ⚠️ **Upload local DB to Railway** (see DB upload steps above) — Amit's courses/tasks not visible in production yet
+- ⚠️ **Delete RESTORE_SECRET** from Railway after DB upload
+- 🟡 **Rebuild Vite and redeploy if changing frontend** — the Vite build in `dist/` is what production serves; local `frontend/` changes don't affect production
+- 🟢 Consider eventually migrating local dev to Vite too (currently using old `frontend/` locally)
+
+End of session 10 handoff.
+
+---
+
+## 17. Session 11 — what changed (2026-05-05)
+
+### Blank white page on local — fixed
+
+**Root cause:** `app.py` preferred `frontend-vite/dist/` over `frontend/` whenever the dist folder existed. The Vite build's `index.html` uses absolute asset paths (`/assets/index-B8jcSqeg.js`) which 404 when served from the `/app` sub-path. Result: HTML loads, JS never loads, blank page.
+
+**Fix:** `FRONTEND_DIR` is now hardcoded to `frontend/` (the active Babel-in-browser frontend). The Vite dist is still on disk for production deploys but is no longer auto-preferred locally.
+
+**Also fixed:** `restart_server.ps1` has a latent bug — `$pid` is a reserved read-only variable in PowerShell 5.1. The script fails silently when run directly. Workaround: run the same logic manually using a different variable name (e.g. `$proc`).
+
+### Three state management bugs fixed
+
+All three were caused by hardcoded or stale global state that didn't reflect the live backend.
+
+#### Bug 1 — New courses invisible in "לפי קורס" and EditDialog
+
+**Root cause:** `window.DIMENSIONS.subject` was set from the hardcoded list in `data.jsx` (9 fixed courses) and never updated from the API. `GroupView` uses `window.DIMENSIONS[groupBy]` to build its ordered group list, so new courses simply never appeared. `EditDialog` uses the same global to render the subject picker.
+
+**Fix (3 files):**
+- `claude-api.jsx` `listCategories()` — now sets `window.DIMENSIONS.subject = cats.map(c => c.name)` and populates a new module-level `_catNameToId` map (`name → id`) after every fetch.
+- `claude-api.jsx` `createCategory()` — also appends the new course to `window.DIMENSIONS.subject` immediately (so GroupView sees it on next tab switch without a page reload).
+- `App.jsx` mount effect — also sets `window.DIMENSIONS.subject = cats.map(c => c.name)` after the parallel `listCategories` fetch, ensuring the list is correct from first render.
+
+#### Bug 2 — Course changes not persisted after EditDialog save
+
+**Root cause:** `_toBackPatch` in `claude-api.jsx` had no mapping for the `subject` field. Edits to a task's course were applied to local React state (`setTasks(...)`) but never sent to the backend. After a page refresh the task reverted to the original course.
+
+**Fix (2 files):**
+- `claude-api.jsx` `_toBackPatch()` — added `subject → category_id` mapping using the `_catNameToId` map (populated by `listCategories` / `createCategory` above).
+- `models.py` `TaskUpdate` — added `category_id: Optional[int] = None`.
+- `app.py` `_TASK_UPDATE_COLUMNS` — added `"category_id"`.
+
+The backend PATCH handler already does a generic `UPDATE adhoc_tasks SET {fields}` so no additional backend logic was needed once the column was whitelisted.
+
+#### Bug 3 — Task text (raw_text) not editable
+
+**Root cause:** `EditDialog` displayed `raw_text` in a read-only `AutoDirText` block. `handleSaveEdit` in `App.jsx` explicitly stripped `raw_text` from the patch payload. Backend `TaskUpdate` had no `title` field and `_TASK_UPDATE_COLUMNS` didn't include it.
+
+**Fix (4 files):**
+- `EditDialog.jsx` — replaced the `<window.AutoDirText>` block with an editable `<textarea>` that updates `draft.raw_text` on change.
+- `App.jsx` `handleSaveEdit` — removed `raw_text` from the destructuring exclusion list so it flows through to `patchTask`.
+- `claude-api.jsx` `_toBackPatch()` — added `raw_text → title` mapping.
+- `models.py` `TaskUpdate` — added `title: Optional[str] = None`.
+- `app.py` `_TASK_UPDATE_COLUMNS` — added `"title"`.
+
+#### What is NOT a bug (keyword re-classification)
+
+Adding a keyword to a course does not re-classify existing tasks. Classification runs once at task creation. This is by design. If you want existing "כללי" tasks to be re-classified after adding keywords, a "re-classify all" button would be needed — that's a new feature, not something in scope yet.
+
+### How to start locally (unchanged)
+
+```powershell
+# Start backend (kills old process on 8001 first):
+$proc = (Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess
+if ($proc) { Stop-Process -Id $proc -Force; Start-Sleep -Seconds 1 }
+$uvicorn = "C:\Users\amit shani\academic_dashboard\.venv\Scripts\uvicorn.exe"
+Start-Process -FilePath $uvicorn -ArgumentList "app:app","--reload","--port","8001" -WorkingDirectory "C:\Users\amit shani\academic_dashboard" -WindowStyle Hidden
+Start-Sleep -Seconds 4
+(Invoke-WebRequest -Uri "http://localhost:8001/healthz" -UseBasicParsing).Content
+# Open browser → http://localhost:8001/app
+```
+
+(Do NOT use `restart_server.ps1` directly — it uses `$pid` which is read-only in PowerShell 5.1.)
+
+### Files changed (session 11)
+
+- `app.py` — `FRONTEND_DIR` hardcoded to `frontend/`; `_TASK_UPDATE_COLUMNS` + `"title"` + `"category_id"`
+- `models.py` — `TaskUpdate` + `title: Optional[str]` + `category_id: Optional[int]`
+- `frontend/src/claude-api.jsx` — `_catNameToId` map; `listCategories` populates map + `DIMENSIONS.subject`; `createCategory` updates both; `_toBackPatch` handles `raw_text → title` and `subject → category_id`
+- `frontend/src/App.jsx` — mount effect sets `window.DIMENSIONS.subject`; `handleSaveEdit` no longer strips `raw_text`
+- `frontend/src/EditDialog.jsx` — `raw_text` now an editable textarea
+
+### Open items (carry forward)
+
+- ⚠️ **Upload local DB to Railway** (from session 10 — if not done yet)
+- ⚠️ **Delete RESTORE_SECRET** from Railway after DB upload
+- 🔴 **Gemini/Groq API key rotation** — key was leaked in early chat. Rotate before real users.
+- 🔴 **`restart_server.ps1` has a bug** — `$pid` is reserved in PowerShell 5.1. Either fix it (rename variable) or stop using it.
+- 🟡 **Defender exclusion** for project folder — SQLite lock risk on Windows.
+- 🟢 **Re-classify feature** — "re-classify all tasks using current keywords" button in CoursesView.
+
+End of session 11 handoff.
+
+---
+
+## 18. Session 12 — what changed (2026-05-06)
+
+### How to start locally (unchanged)
+
+```powershell
+$proc = (Get-NetTCPConnection -LocalPort 8001 -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess
+if ($proc) { Stop-Process -Id $proc -Force; Start-Sleep -Seconds 1 }
+$uvicorn = "C:\Users\amit shani\academic_dashboard\.venv\Scripts\uvicorn.exe"
+Start-Process -FilePath $uvicorn -ArgumentList "app:app","--reload","--port","8001" -WorkingDirectory "C:\Users\amit shani\academic_dashboard" -WindowStyle Hidden
+Start-Sleep -Seconds 4
+(Invoke-WebRequest -Uri "http://localhost:8001/healthz" -UseBasicParsing).Content
+# Open browser → http://localhost:8001/app
+```
+
+### All session 8–12 changes are uncommitted
+
+Everything since "initial commit - deploy ready" (git HEAD, May 5 11:35) lives only in the working tree. No new commit has been made. Run `git status` to see the full list (18 modified files + 1 deleted).
+
+---
+
+### Additional hardening not explicitly listed in sessions 8–11
+
+These changes exist in the working tree but were not called out in the session notes:
+
+#### auth.py — auto-create "כללי" for new users
+`find_or_create_user()` now inserts a "כללי" category immediately after creating a new account. Users can capture tasks on day 1 without going to Courses first.
+
+#### classifier.py — malformed Groq JSON handled gracefully
+- `classify()`: malformed JSON raises `RuntimeError` (caught in `app.py` as 502) instead of crashing the process.
+- `derive_priorities()`: malformed JSON returns `{"categories": [], "kinds": []}` instead of raising.
+
+#### app.py — category name validation + category fallback
+- `create_category`: strips whitespace from name, rejects empty string (400).
+- `capture_task`: if Groq hallucinates a category not in the user's list, falls back to the user's first category + prints a `[WARN]` log instead of 500-ing.
+- `capture_task`: `RuntimeError` from `classifier.classify()` is now caught and returned as 502.
+
+#### app.py — recurring task PATCH hardened
+- New `_COMPLETION_UPDATE_COLUMNS` constant (subset without `title`/`category_id`).
+- Recurring task PATCH now correctly routes: completion-level fields go to `completions`, pattern-level fields (title/category_id) are rejected with a 400 explaining they can't be changed per-occurrence.
+- `_parse_task_id` now wraps the int cast in try/except so a malformed id returns a clean 400.
+
+#### claude-api.jsx — `deleteCategory` cleanup
+`deleteCategory()` now immediately removes the deleted course from `_catNameToId` and `window.DIMENSIONS.subject` so stale entries can't corrupt future PATCHes or appear in EditDialog.
+
+#### claude-api.jsx — `_levelToScale` change
+`_levelToScale("medium")` now returns 3 (was 2). This only affects the offline heuristic fallback — the backend always stores the real importance/urgency.
+
+#### App.jsx — offline task id
+Offline (backend-down) task ids now use the string `"offline:" + Date.now()` instead of `Math.max(...) + 1`, which could collide with real server ids.
+
+#### SuggestionsPanel.jsx — deleted
+The 272-line AI suggestions panel ("suggest new dimensions", "suggest connections") was removed. These were life_dashboard leftovers that don't apply to the academic dashboard's closed-category model. `suggestDimensions` and `suggestConnections` stubs remain in `claude-api.jsx` (return empty) but are no longer exported on `window.claudeAPI` and the panel is gone from `App.jsx` (replaced with a comment).
+
+#### db.py — RAILWAY_VOLUME_MOUNT_PATH fallback
+`DB_PATH` now also checks `RAILWAY_VOLUME_MOUNT_PATH` (auto-set by Railway when a volume is attached) as a second fallback so the DB always lands on the persistent volume even if `DB_PATH` env var is missing.
+
+---
+
+### In-progress feature: bi-weekly recurring patterns
+
+**Goal:** let a user mark a recurring pattern as "every week" / "bi-weekly A (odd weeks)" / "bi-weekly B (even weeks)".
+
+#### What's already done
+
+| Layer | Status |
+|-------|--------|
+| DB: `weeks_active TEXT DEFAULT '[1,2,3,4,5,6,7,8,9,10,11,12,13]'` in `recurring_patterns` | ✅ committed in initial commit |
+| `compute.py`: `occurrence_dates()` reads `weeks_active` JSON and only yields weeks in the list | ✅ |
+| `models.py`: `PatternUpdate.weeks_active: Optional[str]` and `PatternCreate.weeks_active: str` | ✅ uncommitted |
+| `app.py`: `weeks_active` in `_PATTERN_FIELDS` PATCH whitelist | ✅ uncommitted |
+| `ScheduleView.jsx`: `FrequencyPicker` component, `_detectFreq`, `_ALL_WEEKS`/`_ODD_WEEKS`/`_EVEN_WEEKS` constants | ✅ uncommitted |
+| `i18n.jsx`: `schFrequency`, `schEveryWeek`, `schBiweeklyA`, `schBiweeklyB` (Hebrew only) | ✅ uncommitted |
+
+#### What's still missing (the thing we stopped in the middle of)
+
+1. **`PatternRow`** — `FrequencyPicker` is not rendered. The bottom row (importance / urgency / is_required / delete) needs a `<FrequencyPicker>` that calls `immediatePatch({ weeks_active: json })`.
+2. **`NewPatternForm`** — draft state has no `weeks_active` field (defaults to the backend default `_ALL_WEEKS` = every week). The form needs `weeks_active: _ALL_WEEKS` in initial `useState` and a `<FrequencyPicker>` in the bottom row.
+
+Both changes are in `frontend/src/views/ScheduleView.jsx` only. No backend changes needed.
+
+#### Exact wiring needed
+
+**In `PatternRow`** — inside the bottom `<div>` that holds BinaryPicker + is_required + delete, add:
+```jsx
+<FrequencyPicker
+  weeksActive={pattern.weeks_active}
+  onChange={(json) => immediatePatch({ weeks_active: json })}
+/>
+```
+
+**In `NewPatternForm`** — add `weeks_active: _ALL_WEEKS` to initial `useState`, then in the bottom `<div>`:
+```jsx
+<FrequencyPicker
+  weeksActive={draft.weeks_active}
+  onChange={(json) => set({ weeks_active: json })}
+/>
+```
+
+---
+
+### Files changed (session 12 — uncommitted)
+
+Beyond what sessions 8–11 described, the working tree additionally contains:
+
+- `auth.py` — auto-create "כללי" on new user signup
+- `classifier.py` — malformed JSON error handling in `classify()` and `derive_priorities()`
+- `app.py` — category name validation, category fallback in capture_task, RuntimeError catch, `_COMPLETION_UPDATE_COLUMNS`, improved `_parse_task_id`
+- `db.py` — `RAILWAY_VOLUME_MOUNT_PATH` fallback for DB_PATH
+- `frontend/src/App.jsx` — `noCourses` state, DIMENSIONS.subject set on mount, offline id fix, SuggestionsPanel comment
+- `frontend/src/claude-api.jsx` — `_catNameToId`, improved `listCategories`/`createCategory`/`deleteCategory`, `_levelToScale` fix, `_toBackPatch` handles raw_text/subject, suggestDimensions/suggestConnections removed from window.claudeAPI
+- `frontend/src/i18n.jsx` — suggestions strings removed, subject/context translations removed, frequency picker strings added
+- `frontend/src/views/ScheduleView.jsx` — `FrequencyPicker` component + constants (NOT YET wired into PatternRow / NewPatternForm)
+- `frontend/src/data.jsx` — hardcoded English categories removed
+- `frontend/src/SuggestionsPanel.jsx` — **DELETED**
+- `models.py` — `PatternUpdate.weeks_active`, `PatternCreate.weeks_active`, `TaskUpdate.title`, `TaskUpdate.category_id`
+- `HANDOFF.md` — this file (sessions 8–12)
+
+### Open items (carry forward)
+
+- 🔴 **NEXT: wire FrequencyPicker into PatternRow + NewPatternForm** (ScheduleView.jsx only — see exact wiring above)
+- ⚠️ **Upload local DB to Railway** (from session 10 — confirm if done)
+- ⚠️ **Delete RESTORE_SECRET** from Railway env vars if not already done
+- 🔴 **Groq API key rotation** — key was leaked in early chat. Rotate before real users.
+- 🟡 **Defender exclusion** for `C:\Users\amit shani\academic_dashboard\` — SQLite lock risk on Windows.
+- 🟢 **Commit all uncommitted changes** — 18 files, all sessions since "initial commit - deploy ready".
+- 🟢 **Re-classify feature** — "re-classify all tasks using current keywords" button in CoursesView.
+
+End of session 12 handoff.
+
+---
+
+## Session 13 — Font / UI polish + Onboarding wizard + Admin view
+
+### What was done
+
+#### UI polish (local only)
+- **Font**: Added "Assistant" to Google Fonts + CSS font stack (LTR and RTL). May look similar to Heebo — verify in browser computed styles.
+- **De-italicized** the entire UI: removed `fontStyle: "italic"` from App.jsx (brand, date, tagline), EditDialog title, AgendaView bucket headers, EisenhowerView quadrant titles, CalendarView month label, AllView empty state, TaskCard side-steps, CoursesView description, ScheduleView empty state, CaptureBar thinking indicator, login title.
+- **Tutorial redesign**: 7 steps → 4 steps. Non-blocking floating card (no full-screen overlay). Each step highlights the relevant UI element via `data-tutorial-id` + `.tutorial-glow` CSS class (pulsing accent ring). Step 3 clearly distinguishes one-time tasks (capture bar) vs recurring (מערכת שעות). Tutorial auto-skipped after onboarding completes.
+- **ScheduleView HW fields**: Applied the "📅 מתי מתפרסם / ⏰ מתי להגיש" two-row layout to **both** `PatternRow` and `NewPatternForm` (PatternRow was done in session 12; NewPatternForm was the remaining piece).
+- **FrequencyPicker**: Already wired in session 12 — confirmed done.
+- **CoursesView**: "✏️ ערוך שם וצבע" edit panel added to CourseCard (done in session 12, confirmed).
+
+#### Onboarding wizard — `frontend/src/OnboardingWizard.jsx` (new file)
+Multi-step wizard shown to new users (no courses, `onboarding.v1.done` not set in userStorage) immediately after OAuth login.
+
+**Flow:** Welcome (marketing copy) → Add Courses (name + color picker) → Add Recurring Schedule (course + kind + day + time) → Save → Dashboard.
+
+**Key implementation details:**
+- Triggered in `App.jsx`: `cats.length === 0 && !window.userStorage.get("onboarding.v1.done")` → `setShowOnboarding(true)`.
+- On complete/skip: sets `onboarding.v1.done = true` AND `tutorial.v1.seen = true` (so tutorial doesn't auto-open right after).
+- `onComplete` callback in App.jsx refreshes `listCategories()` and updates `SUBJECT_META` + `DIMENSIONS.subject`.
+- Days use `DayOfWeek` strings (`"Sun"`, `"Mon"` etc.) — NOT integers. This was a bug found and fixed.
+- Patterns: only `category_id`, `kind`, `label`, `day_of_week`, `start_time`, `is_required` are sent (no extra null fields).
+- "🎓 הגדרה מחדש" button added to TweaksHost (settings panel) so user can re-open onboarding without clearing localStorage manually.
+
+**Known issues / NOT hardened:**
+- ⚠️ **No validation** on courses step: user can advance with a course name that is just whitespace (filtered in `validCourses` but UX doesn't warn).
+- ⚠️ **No error recovery UI** on the courses step (only on save step). If `createCategory` fails mid-loop, partial courses are created and the user sees a generic error.
+- ⚠️ **"הגדרה מחדש" button placement** is awkward — sits next to the logout button in the user section of settings. Should be a separate section or labeled more clearly (e.g. "הגדרת קורסים").
+- ⚠️ **Onboarding re-open is not clean**: clicking "הגדרה מחדש" when user already has courses will show the wizard but saving will try to re-create courses that already exist → likely 409 conflict from backend. Needs a guard (check if name already exists, skip or patch instead).
+- ⚠️ **No loading skeleton** — wizard shows blank during auth check before `showOnboarding` is set.
+
+#### Admin view — `frontend/src/views/AdminView.jsx` (new file)
+Localhost-only tab ("⚙️ Admin") that calls Railway production API directly to show all users + stats.
+
+**Backend**: `GET /admin/overview` added to `app.py`, protected by `ADMIN_USER_ID` (user_id=1). Returns all users with `course_count`, `pattern_count`, `tasks_open`, `tasks_done`.
+
+**Frontend**: calls `https://academic-dashboard-production-d0d5.up.railway.app/admin/overview` with `credentials: "include"`. Tab only visible when `_IS_LOCAL` (localhost/127.0.0.1).
+
+**Known issues — Admin view does NOT work yet:**
+- ⚠️ **CORS / cookie mismatch**: the Railway session cookie is `SameSite=Lax` on the Railway domain. A cross-origin fetch from `localhost:8001` to the Railway URL may not send the cookie correctly, causing a 401/403. Needs testing. Fix: either (a) open Railway URL first to ensure cookie exists and browser sends it cross-origin, or (b) add a proxy endpoint on the local backend that forwards to Railway.
+- ⚠️ **User must be logged in to Railway** (not just localhost) for the cookie to be valid. If local and Railway use different Google OAuth client IDs, the sessions are separate — local login ≠ Railway login.
+- ⚠️ **`Settings` icon** was used as fallback after `Shield` icon crashed the app (Shield doesn't exist in `frontend/src/icons.jsx`). Verify the icon looks acceptable.
+- ⚠️ **No drill-down**: only aggregate stats. No way to see individual user's tasks/courses from the admin view.
+
+### Files changed this session
+- `frontend/index.html` — Assistant font, tutorial-glow keyframes, AdminView + OnboardingWizard script tags
+- `frontend/src/App.jsx` — de-italic, admin tab, `_IS_LOCAL`, `showOnboarding` state, `onOpenOnboarding` prop, TweaksHost "הגדרה מחדש" button, tutorial 4 steps, AdminView in renderView
+- `frontend/src/i18n.jsx` — `viewAdmin` string added
+- `frontend/src/OnboardingWizard.jsx` — **NEW** (full onboarding wizard)
+- `frontend/src/views/AdminView.jsx` — **NEW** (admin table)
+- `frontend/src/EditDialog.jsx` — de-italic
+- `frontend/src/TaskCard.jsx` — de-italic
+- `frontend/src/CaptureBar.jsx` — de-italic
+- `frontend/src/views/AgendaView.jsx` — de-italic
+- `frontend/src/views/AllView.jsx` — de-italic
+- `frontend/src/views/CalendarView.jsx` — de-italic
+- `frontend/src/views/CoursesView.jsx` — de-italic
+- `frontend/src/views/EisenhowerView.jsx` — de-italic
+- `frontend/src/views/ScheduleView.jsx` — NewPatternForm HW fields restructured
+- `app.py` — `GET /admin/overview` endpoint added
+
+### Open items (carry forward)
+- 🔴 **Admin view broken** — CORS/cookie issue when calling Railway from localhost. See known issues above.
+- 🔴 **Onboarding "הגדרה מחדש" + existing courses** — re-opening wizard when courses exist will fail on save (duplicate name). Need to skip already-existing courses or show a different flow.
+- 🟡 **Onboarding UX hardening** — add input validation, better error messages, handle partial failures.
+- 🟡 **"הגדרה מחדש" button placement** — move out of user section, label more clearly.
+- 🔴 **Groq API key rotation** — leaked in early chat. Rotate before real users.
+- 🟡 **Commit all uncommitted changes** — 24+ files since "initial commit - deploy ready".
+- 🟢 **Re-classify feature** — "re-classify all tasks using current keywords" button in CoursesView.
+- 🟡 **Defender exclusion** for project folder — SQLite lock risk on Windows.
+
+End of session 13 handoff.
+
+---
+
+## Session 14 — Bug fixes + known issues documented (2026-05-08)
+
+### 4 bugs fixed
+
+#### Fix 1 — EditDialog: free-form course creation removed
+
+**File:** `frontend/src/EditDialog.jsx`
+
+`extensible = (dim === "subject")` → `extensible = false`.
+
+The `+ חדש` button in the subject field let users type an arbitrary course name into a task's subject. The string was stored in React state but could never be persisted — `_toBackPatch` needs a category_id which only exists for courses that were properly created. Saving with a free-form subject silently dropped the change after the API call.
+
+**Fix:** Closed the field entirely. Subject editing is now limited to the existing course list (same as importance/urgency).
+
+---
+
+#### Fix 2 — OnboardingWizard: skip createCategory for already-existing courses
+
+**File:** `frontend/src/OnboardingWizard.jsx`
+
+**Problem:** Clicking "🎓 הגדרה מחדש" opened the wizard; pressing Save called `createCategory` for every course even if it already existed → 409 conflict → wizard showed generic save error and left courses in a half-created state.
+
+**Fix:** At the start of `save()`, call `listCategories()` and build an `existingByName` map (name.toLowerCase() → id). In the course loop, skip `createCategory` and reuse the existing id if the name is already there.
+
+Also improved the error message: `409` in the error string → shows "קורס עם שם זה כבר קיים" instead of a raw fetch error.
+
+---
+
+#### Fix 3 — ScheduleView: new course created here unlocks CaptureBar
+
+**Files:** `frontend/src/views/ScheduleView.jsx`, `frontend/src/App.jsx`
+
+**Problem:** Adding a course via the ScheduleView's "+ קורס חדש" form did not call back to App.jsx, so `noCourses` stayed `true` and the CaptureBar remained locked even though the backend already had the course.
+
+**Fix:**
+- `ScheduleView` function signature: `function ScheduleView({ onCoursesChanged } = {})`
+- `handleCreateCourse`: calls `onCoursesChanged?.()` after `setAddingCourse(false)` on success
+- `App.jsx` schedule case: `<window.ScheduleView onCoursesChanged={() => setNoCourses(false)} />`
+
+---
+
+### Known issues NOT fixed this session (documented for next session)
+
+#### Issue A — Stale `_catNameToId` after course rename
+
+**Where:** `frontend/src/claude-api.jsx`, `frontend/src/views/CoursesView.jsx`
+
+`_catNameToId` is a module-level map (name → id). It's populated by `listCategories()` and `createCategory()`. Course rename is handled by `CoursesView`'s `handleNameSave`, which PATCHes the backend but never updates `_catNameToId`. If a user renames a course and then edits a task's subject field, the EditDialog still shows the old name as an option (from `window.DIMENSIONS.subject`), and `_toBackPatch` would look up the old name which no longer maps to anything → category_id = undefined → PATCH silently fails.
+
+**When does it trigger:** Only after a course rename. In current usage this is rare, but it's a correctness hole.
+
+**Suggested fix:** In `CoursesView.jsx` `handleNameSave`, after a successful PATCH:
+1. Remove old name from `_catNameToId` (need to expose a `window.claudeAPI.renameCategoryLocal(oldName, newName, id)` helper, or just call `listCategories()` to refresh the whole map).
+2. Update `window.DIMENSIONS.subject` to replace the old name with the new name.
+
+Easiest safe fix: call `window.claudeAPI.listCategories()` after each successful name PATCH — it refreshes both `_catNameToId` and `DIMENSIONS.subject` atomically.
+
+---
+
+#### Issue B — Admin view CORS/cookie problem
+
+**Where:** `frontend/src/views/AdminView.jsx`
+
+The admin view calls `https://academic-dashboard-production-d0d5.up.railway.app/admin/overview` from localhost. This is a cross-origin fetch. The Railway session cookie (`SameSite=Lax`) is NOT sent on cross-origin requests to a different domain, causing a 401.
+
+**Fix options (pick one):**
+1. **Proxy approach (recommended):** Add a `/admin/proxy-overview` endpoint to the local FastAPI server that reads the Railway URL and `RAILWAY_ADMIN_TOKEN` from env, makes a server-side HTTP call to Railway with an auth header, and returns the result. No cookie issues.
+2. **Same-origin approach:** Navigate to the Railway production URL in the browser, sign in there, then the session cookie is scoped to that domain and the request works — but this means the admin tab only works from the Railway URL, not localhost.
+
+---
+
+#### Issue C — Classifier: same-keyword edge case
+
+**Where:** `keyword_classifier.py`
+
+If two courses share the same keyword (e.g. both "חשבון" and "אנליזה" have the keyword "גבולות"), the classifier returns the first course that matches, not necessarily the correct one. There is no disambiguation.
+
+**Suggested hardening:**
+1. **At keyword creation time** (when user adds a keyword to a course): check all other courses for the same keyword and warn in the UI.
+2. **At classify time:** when multiple courses match with equal keyword-hit counts, fall through to AI with the candidate list provided as context.
+
+---
+
+#### Issue D — AI classifier: give it the closed course list
+
+**Where:** `classifier.py` → `classify()`
+
+The Groq AI fallback currently gets the user's category list as valid options, but the prompt does not strongly enforce the closed-list constraint. Result: the AI occasionally invents a category not in the list. `app.py` catches this and falls back to the first category, but the wrong fallback is silent.
+
+**Suggested fix:** In `classify()`, validate the returned `category` against `user_categories` *inside* `classifier.py` (before returning) and raise `ValueError` if it's not in the list. The caller in `app.py` can then retry once with a stricter prompt or fall to first category.
+
+---
+
+### Open items (updated)
+
+- 🔴 **Admin view broken** — CORS/cookie issue. Use proxy approach (Issue B above).
+- 🔴 **Stale `_catNameToId` after rename** — call `listCategories()` in CoursesView after name PATCH (Issue A above).
+- 🟡 **Classifier: same-keyword edge case** — warn on duplicate keyword add (Issue C above).
+- 🟡 **Classifier: AI not strictly respecting closed list** — validate + retry in classifier.py (Issue D above).
+- 🔴 **Groq API key rotation** — leaked in early chat. Rotate before real users.
+- 🟡 **Commit all uncommitted changes** — 26+ files since initial commit.
+- 🟡 **Defender exclusion** for project folder — SQLite lock risk on Windows.
+- 🟢 **Re-classify feature** — "re-classify all tasks using current keywords" button in CoursesView.
+
+End of session 14 handoff.

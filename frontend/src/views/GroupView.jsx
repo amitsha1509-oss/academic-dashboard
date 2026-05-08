@@ -6,7 +6,7 @@ function GroupView({ tasks, groupBy, ...rest }) {
     if (!groups[key]) groups[key] = [];
     groups[key].push(t);
   });
-  const order = window.DIMENSIONS[groupBy];
+  const order = window.DIMENSIONS[groupBy] || [];
   const orderedKeys = order.filter(k => groups[k]);
 
   if (tasks.length === 0) return <window.EmptyState onPick={rest.onExampleClick} />;

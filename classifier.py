@@ -134,7 +134,11 @@ def derive_priorities(user_context: str, user_categories: list[str] = None) -> d
         response_format={"type": "json_object"},
         temperature=0.0,
     )
-    data = json.loads(response.choices[0].message.content)
+    try:
+        data = json.loads(response.choices[0].message.content)
+    except Exception as e:
+        print(f"[classifier] derive_priorities: malformed JSON from Groq: {e!r}")
+        return {"categories": [], "kinds": []}
     return {
         "categories": data.get("categories", []),
         "kinds": data.get("kinds", []),
@@ -226,4 +230,38 @@ def classify(
         response_format={"type": "json_object"},
         temperature=0.0,
     )
-    return models.ClassifiedTask.model_validate_json(response.choices[0].message.content)
+    try:
+        classified = models.ClassifiedTask.model_validate_json(response.choices[0].message.content)
+    except Exception as e:
+        print(f"[classifier] classify: malformed JSON from Groq: {e!r}")
+        raise RuntimeError("Groq returned malformed response")
+
+    # Enforce closed list: if AI invented a category, retry once with an explicit constraint.
+    if classified.category_name not in user_categories:
+        print(f"[classifier] AI returned unknown category {classified.category_name!r}; retrying")
+        cats_options = " | ".join(f'"{c}"' for c in user_categories)
+        strict_message = (
+            user_message
+            + f"\n\nCRITICAL CORRECTION: category_name MUST be exactly one of: {cats_options}"
+            + " — no other values are valid. Your previous answer was rejected."
+        )
+        retry_resp = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": _system_prompt(user_categories)},
+                {"role": "user", "content": strict_message},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0,
+        )
+        try:
+            classified = models.ClassifiedTask.model_validate_json(retry_resp.choices[0].message.content)
+        except Exception as e:
+            print(f"[classifier] retry: malformed JSON: {e!r}")
+            raise RuntimeError("Groq returned malformed response on retry")
+
+        if classified.category_name not in user_categories:
+            print(f"[classifier] retry still invalid ({classified.category_name!r}); using {user_categories[0]!r}")
+            classified.category_name = user_categories[0]
+
+    return classified

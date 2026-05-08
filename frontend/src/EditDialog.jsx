@@ -14,18 +14,17 @@ function EditDialog({ task, onClose, onSave }) {
   // life_dashboard that don't match our Hebrew course names.
   const labelFor = (dim, v) => {
     if (dim === "subject") return v;
-    if (dim === "importance" || dim === "urgency") {
+    if ((dim === "importance" || dim === "urgency") && v) {
       return t("level" + v[0].toUpperCase() + v.slice(1));
     }
-    return v;
+    return v ?? "—";
   };
 
   const Field = ({ label, dim, value }) => {
     const canonical = D[dim] || [];
     // If the task's current value is custom (not in canonical), still show it.
     const all = (value && !canonical.includes(value)) ? [...canonical, value] : canonical;
-    // subject is user-extensible; importance/urgency stay fixed.
-    const extensible = (dim === "subject");
+    const extensible = false;
     const [adding, setAdding] = React.useState(false);
     const [newVal, setNewVal] = React.useState("");
 
@@ -73,7 +72,6 @@ function EditDialog({ task, onClose, onSave }) {
                 background: "transparent",
                 color: "var(--ink-3)",
                 fontWeight: 500,
-                fontStyle: "italic",
               }}
               title={t("editAddCustomTitle")}
             >+ {t("editNew")}</button>
@@ -148,7 +146,7 @@ function EditDialog({ task, onClose, onSave }) {
           display: "flex", alignItems: "center", justifyContent: "space-between",
           borderBottom: "1px solid var(--line)",
         }}>
-          <span className="serif" style={{ fontSize: 22, fontStyle: "italic", color: "var(--ink-2)" }}>{t("editTask")}</span>
+          <span style={{ fontSize: 18, fontWeight: 600, color: "var(--ink-2)" }}>{t("editTask")}</span>
           <button onClick={onClose} style={{
             border: "none", background: "transparent", color: "var(--ink-3)",
             display: "flex", padding: 4,
@@ -158,17 +156,37 @@ function EditDialog({ task, onClose, onSave }) {
         </div>
 
         <div style={{ padding: "18px 20px 22px", display: "flex", flexDirection: "column", gap: 18 }}>
-          <window.AutoDirText
-            style={{
-              display: "block",
-              fontSize: 16, color: "var(--ink)", lineHeight: 1.45,
-              padding: "10px 14px",
-              background: "var(--paper-2)", border: "1px solid var(--line)",
-              borderRadius: 10,
-            }}
-          >
-            {draft.raw_text}
-          </window.AutoDirText>
+          {draft._source === "recurring" ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <window.AutoDirText style={{
+                display: "block",
+                fontSize: 15, color: "var(--ink-2)", lineHeight: 1.5,
+                padding: "10px 14px",
+                background: "var(--paper-3)", border: "1px solid var(--line)",
+                borderRadius: 10,
+              }}>
+                {draft.raw_text}
+              </window.AutoDirText>
+              <span style={{ fontSize: 11, color: "var(--ink-4)" }}>
+                משימה קבועה — לשינוי שם עבור ללשונית מערכת שעות
+              </span>
+            </div>
+          ) : (
+            <textarea
+              value={draft.raw_text || ""}
+              onChange={e => setDraft(d => ({ ...d, raw_text: e.target.value }))}
+              dir="auto"
+              rows={2}
+              style={{
+                display: "block", width: "100%", boxSizing: "border-box",
+                fontSize: 15, color: "var(--ink)", lineHeight: 1.5,
+                padding: "10px 14px",
+                background: "var(--paper-2)", border: "1px solid var(--line)",
+                borderRadius: 10, fontFamily: "inherit",
+                resize: "vertical", outline: "none",
+              }}
+            />
+          )}
 
           <Field label={t("subject")} dim="subject" value={draft.subject} />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>

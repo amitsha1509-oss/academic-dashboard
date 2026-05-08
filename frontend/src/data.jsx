@@ -75,15 +75,8 @@ const NOW = new Date();
 
 const SEED_TASKS = [];  // App.jsx loads from backend
 
-// AI suggestions are not implemented in this project (we focus on the
-// closed-list classifier). Empty stubs so SuggestionsPanel doesn't crash.
-const SUGG_DIMS = { new_values: [], new_dimensions: [] };
-const SUGG_CONNS = { sessions: [], related: [] };
-
 window.DIMENSIONS = DIMENSIONS;
 window.SUBJECT_META = SUBJECT_META;
 window.CONTEXT_META = CONTEXT_META;
 window.NOW = NOW;
 window.SEED_TASKS = SEED_TASKS;
-window.SUGG_DIMS = SUGG_DIMS;
-window.SUGG_CONNS = SUGG_CONNS;

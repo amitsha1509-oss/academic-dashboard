@@ -43,7 +43,7 @@ function EisenhowerView({ tasks, ...rest }) {
           }}>
             <div style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                <span className="serif" style={{ fontSize: 22, fontStyle: "italic", color: q.accent, whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.2 }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: q.accent, whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.2 }}>
                   {t(q.titleKey)}
                 </span>
                 <span style={{ fontSize: 11, color: "var(--ink-4)", fontFamily: "var(--font-mono)" }}>
@@ -57,7 +57,7 @@ function EisenhowerView({ tasks, ...rest }) {
 
             {items.length === 0 ? (
               <div style={{
-                fontSize: 12.5, color: "var(--ink-4)", fontStyle: "italic",
+                fontSize: 12.5, color: "var(--ink-4)",
                 padding: "30px 0", textAlign: "center",
               }}>
                 {t("empty")}

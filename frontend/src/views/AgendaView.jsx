@@ -39,8 +39,8 @@ function AgendaView({ tasks, ...rest }) {
                      : b === "Tomorrow"? "var(--accent-3)"
                      : "var(--line-strong)";
         const header = (
-          <span className="serif" style={{
-            fontSize: 20, fontStyle: "italic",
+          <span style={{
+            fontSize: 16, fontWeight: 700,
             color: b === "Overdue" ? "var(--urg-high)" : b === "Today" ? "var(--accent)" : "var(--ink)",
             lineHeight: 1.2,
           }}>

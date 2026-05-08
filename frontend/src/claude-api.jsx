@@ -17,6 +17,10 @@ const API_BASE = window.location.origin.startsWith("http://localhost")
 
 // ─── Helpers ──────────────────────────────────────────────
 
+// Maps category name → category id. Populated when listCategories or
+// createCategory is called. Used by _toBackPatch to resolve subject → category_id.
+const _catNameToId = {};
+
 // Centralized fetch wrapper. ALWAYS includes credentials so the session
 // cookie flows on every request (not only same-origin). Without this,
 // cross-origin deploys (e.g. frontend on a CDN, backend on a subdomain)
@@ -60,7 +64,7 @@ function _scaleToLevel(n) {
   return n >= 4 ? "high" : "low";
 }
 function _levelToScale(level) {
-  return level === "high" ? 5 : 2;
+  return level === "high" ? 5 : 3;
 }
 
 // Our task → frontend's expected shape.
@@ -94,6 +98,11 @@ function _toBackPatch(fields) {
   if ("status" in fields)      out.status = fields.status;
   if ("notes" in fields)       out.notes = fields.notes;
   if ("scheduled_at" in fields) out.scheduled_at = fields.scheduled_at;
+  if ("raw_text" in fields && fields.raw_text) out.title = fields.raw_text;
+  if ("subject" in fields && fields.subject) {
+    const catId = _catNameToId[fields.subject];
+    if (catId != null) out.category_id = catId;
+  }
   if ("context" in fields && fields.context) {
     const place = fields.context.replace(/^@/, "");
     // "@anywhere" is the UI's "no place" — backend's TaskPlace literal doesn't
@@ -253,7 +262,22 @@ async function deletePattern(id) {
 
 async function listCategories() {
   const r = await _fetch(`/categories`);
-  return _json(r);
+  const cats = await _json(r);
+  // Clear stale entries before repopulating so deleted categories don't linger.
+  Object.keys(_catNameToId).forEach(k => delete _catNameToId[k]);
+  cats.forEach(c => {
+    _catNameToId[c.name] = c.id;
+    // Always overwrite so renames and color changes are reflected immediately.
+    window.SUBJECT_META[c.name] = {
+      color: "#" + (c.color_dark || "6B7280"),
+      icon: "Book",
+      label: c.name,
+      bg: "#F3F4F6",
+      mid: "#9CA3AF",
+    };
+  });
+  window.DIMENSIONS.subject = cats.map(c => c.name);
+  return cats;
 }
 
 async function createCategory(payload) {
@@ -264,14 +288,20 @@ async function createCategory(payload) {
     keepalive: true,
   });
   const cat = await _json(r);
-  if (cat && cat.name && !window.SUBJECT_META[cat.name]) {
-    window.SUBJECT_META[cat.name] = {
-      color: "#" + (cat.color_dark || "6B7280"),
-      icon: "Book",
-      label: cat.name,
-      bg: "#F3F4F6",
-      mid: "#9CA3AF",
-    };
+  if (cat && cat.name) {
+    _catNameToId[cat.name] = cat.id;
+    if (!window.SUBJECT_META[cat.name]) {
+      window.SUBJECT_META[cat.name] = {
+        color: "#" + (cat.color_dark || "6B7280"),
+        icon: "Book",
+        label: cat.name,
+        bg: "#F3F4F6",
+        mid: "#9CA3AF",
+      };
+    }
+    if (!window.DIMENSIONS.subject.includes(cat.name)) {
+      window.DIMENSIONS.subject = [...window.DIMENSIONS.subject, cat.name];
+    }
   }
   return cat;
 }
@@ -286,6 +316,13 @@ async function deleteCategory(id) {
     try { detail = (await r.json()).detail; } catch { detail = await r.text(); }
     throw new Error(`${r.status}: ${detail}`);
   }
+  // Remove from in-memory map and DIMENSIONS so stale entries can't corrupt future PATCHes.
+  Object.keys(_catNameToId).forEach(name => {
+    if (_catNameToId[name] === id) {
+      delete _catNameToId[name];
+      window.DIMENSIONS.subject = window.DIMENSIONS.subject.filter(s => s !== name);
+    }
+  });
   return true;
 }
 
@@ -303,8 +340,6 @@ async function submitFeedback(text, page) {
 
 window.claudeAPI = {
   classifyTask,
-  suggestDimensions,
-  suggestConnections,
   listTasks,
   createTask,
   patchTask,

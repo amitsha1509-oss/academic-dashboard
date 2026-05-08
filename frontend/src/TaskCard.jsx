@@ -126,7 +126,7 @@ function TaskCard({ task, onToggleDone, onDelete, onEdit, onToggleStep, onDismis
                 }}
               >
                 <Sparkles size={12} stroke={2} style={{ color: "var(--accent)", flexShrink: 0 }} />
-                <span className="serif" style={{ fontSize: 14, fontStyle: "italic", color: "var(--accent)" }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--accent)" }}>
                   {t("sideSteps")}
                 </span>
                 <span style={{ color: "var(--ink-3)", fontFamily: "var(--font-mono)", fontSize: 10.5 }}>
