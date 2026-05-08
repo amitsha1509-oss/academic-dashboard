@@ -116,7 +116,17 @@ function App({ user }: { user: User }) {
     try {
       const task = await api.createTask(raw, opts);
       setTasks(ts => [task, ...ts]);
-    } catch (e) { toast.error('שגיאה ביצירת משימה: ' + (e as Error).message); }
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (msg.includes('קורסים')) {
+        toast.error('אין קורסים מוגדרים', {
+          description: 'צור קורס לפני הוספת משימות',
+          action: { label: 'לקורסים ←', onClick: () => setView('courses') },
+        });
+      } else {
+        toast.error('שגיאה ביצירת משימה: ' + msg);
+      }
+    }
     finally { setClassifying(false); }
   };
 

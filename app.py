@@ -847,9 +847,26 @@ def delete_task(
     return {"id": task_id, "deleted": True}
 
 
-# ─── Feedback ──────────────────────────────────────────────────────
-# Owner-only admin gate. user_id 1 is Amit (db.OWNER_USER_ID).
+# ─── Admin auth ────────────────────────────────────────────────────
+# Admin access via EITHER:
+#   1. Session cookie (signed in as user 1 via OAuth)
+#   2. ?key=ADMIN_KEY query param (set ADMIN_KEY env var on Railway)
 ADMIN_USER_ID = db.OWNER_USER_ID
+
+
+def _is_admin(request: Request) -> bool:
+    """Return True if the request is from the admin — via ?key= OR session cookie."""
+    key = request.query_params.get("key", "")
+    admin_key = os.environ.get("ADMIN_KEY", "")
+    if admin_key and key == admin_key:
+        return True
+    # Verify session cookie directly (can't call get_current_user — it uses Cookie injection)
+    cookie = request.cookies.get(auth.SESSION_COOKIE)
+    if cookie:
+        user_id = auth._read_cookie_value(cookie)
+        if user_id == ADMIN_USER_ID:
+            return True
+    return False
 
 
 @app.post("/feedback", status_code=201)
@@ -941,9 +958,9 @@ def admin_list_feedback(user: auth.User = Depends(auth.get_current_user)):
 
 
 @app.get("/admin/overview")
-def admin_overview(user: auth.User = Depends(auth.get_current_user)):
-    """All users with aggregate stats. Admin only."""
-    if user.id != ADMIN_USER_ID:
+def admin_overview(request: Request):
+    """All users with aggregate stats. Admin only (session or ?key=)."""
+    if not _is_admin(request):
         raise HTTPException(403, "admin only")
     with db.connect() as c:
         rows = c.execute("""
@@ -963,9 +980,9 @@ def admin_overview(user: auth.User = Depends(auth.get_current_user)):
 
 
 @app.post("/admin/users/{target_id}/reset")
-def admin_reset_user(target_id: int, user: auth.User = Depends(auth.get_current_user)):
+def admin_reset_user(target_id: int, request: Request):
     """Wipe all data for target_id. Keeps the user row so they can log back in. Admin only."""
-    if user.id != ADMIN_USER_ID:
+    if not _is_admin(request):
         raise HTTPException(403, "admin only")
     if target_id == ADMIN_USER_ID:
         raise HTTPException(400, "cannot reset admin account")
@@ -1018,29 +1035,30 @@ _ADMIN_PANEL_HTML = """<!DOCTYPE html>
 <div id="wrap"><em style="padding:16px;display:block">Loading…</em></div>
 <div id="msg"></div>
 <script>
+const KP='__KEY_PARAM__';
 async function load(){
   const wrap=document.getElementById('wrap');
   wrap.innerHTML='<em style="padding:16px;display:block">Loading…</em>';
-  const r=await fetch('/admin/overview',{credentials:'include'});
-  if(!r.ok){wrap.innerHTML='<b style="padding:16px;display:block;color:red">Error '+r.status+' — sign in as admin first at <a href="/app">/app</a></b>';return;}
+  const r=await fetch('/admin/overview'+KP,{credentials:'include'});
+  if(!r.ok){wrap.innerHTML='<b style="padding:16px;display:block;color:red">Error '+r.status+'</b>';return;}
   const data=await r.json();
   if(!data.length){wrap.innerHTML='<em style="padding:16px;display:block">No users yet.</em>';return;}
   let h='<table><tr><th>ID</th><th>Email</th><th>Name</th><th>Joined</th><th>Courses</th><th>Patterns</th><th>Tasks open/done</th><th></th></tr>';
   for(const u of data){
     const joined=(u.created_at||'').slice(0,10);
-    const reset=u.id!==1?`<button class="reset-btn" onclick="resetUser(${u.id},'${(u.name||u.email||'user').replace(/'/g,'')}')" >Reset</button>`:'<em style="color:#94a3b8;font-size:12px">admin</em>';
+    const reset=u.id!==1?`<button class="reset-btn" onclick="resetUser(${u.id},'${(u.name||u.email||'user').replace(/'/g,'')}')">Reset</button>`:'<em style="color:#94a3b8;font-size:12px">admin</em>';
     h+=`<tr><td>${u.id}</td><td>${u.email||''}</td><td>${u.name||''}</td><td>${joined}</td><td>${u.course_count}</td><td>${u.pattern_count}</td><td>${u.tasks_open} / ${u.tasks_done}</td><td>${reset}</td></tr>`;
   }
   h+='</table>';
   wrap.innerHTML=h;
 }
 async function resetUser(id,name){
-  if(!confirm('Reset '+name+'?\\nThis will delete ALL their tasks, courses, and schedule.\\nThey can log back in and start fresh.'))return;
+  if(!confirm('Reset '+name+'?\\nDeletes ALL their tasks, courses, and schedule.\\nThey can log back in and start fresh.'))return;
   const msg=document.getElementById('msg');
   msg.style.display='none';
-  const r=await fetch('/admin/users/'+id+'/reset',{method:'POST',credentials:'include'});
+  const r=await fetch('/admin/users/'+id+'/reset'+KP,{method:'POST',credentials:'include'});
   msg.style.display='block';
-  if(r.ok){msg.className='ok';msg.textContent=name+' was reset successfully.';load();}
+  if(r.ok){msg.className='ok';msg.textContent=name+' reset successfully.';load();}
   else{msg.className='err';msg.textContent='Error '+r.status;}
 }
 load();
@@ -1050,8 +1068,15 @@ load();
 
 
 @app.get("/admin", response_class=HTMLResponse, include_in_schema=False)
-def admin_panel(user: auth.User = Depends(auth.get_current_user)):
-    """Simple HTML admin panel. Sign in to /app first, then navigate here."""
-    if user.id != ADMIN_USER_ID:
-        raise HTTPException(403, "admin only")
-    return HTMLResponse(_ADMIN_PANEL_HTML)
+def admin_panel(request: Request):
+    """Admin panel — access via ?key=ADMIN_KEY (no login needed) or session cookie."""
+    if not _is_admin(request):
+        return HTMLResponse(
+            "<h2 style='font-family:system-ui;padding:32px'>Access denied."
+            " Add <code>?key=YOUR_ADMIN_KEY</code> to the URL.</h2>",
+            status_code=403,
+        )
+    key = request.query_params.get("key", "")
+    key_param = f"?key={key}" if key else ""
+    html = _ADMIN_PANEL_HTML.replace("__KEY_PARAM__", key_param)
+    return HTMLResponse(html)
