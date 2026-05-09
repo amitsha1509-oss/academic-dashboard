@@ -84,18 +84,19 @@ function TaskCard({ task, onToggleDone, onDelete, onEdit, onToggleStep, onDismis
               fontSize: compact ? 14 : 15.5,
               fontWeight: 450,
               lineHeight: 1.45,
-              color: "var(--ink)",
+              color: task.raw_text ? "var(--ink)" : "var(--ink-4)",
               textDecoration: done ? "line-through" : "none",
               wordBreak: "break-word",
+              fontStyle: task.raw_text ? "normal" : "italic",
             }}
           >
-            {task.raw_text}
+            {task.raw_text || task.subject || "ללא כותרת"}
           </div>
 
           <div style={{
             display: "flex", flexWrap: "wrap", gap: 6,
             marginTop: compact ? 6 : 9,
-            direction: "ltr",
+            direction: rtl ? "rtl" : "ltr",
           }}>
             <window.SubjectChip subject={task.subject} size={compact ? "sm" : "md"} />
             {task.time_value && <window.TimeChip iso={task.time_value} />}
@@ -164,7 +165,7 @@ function TaskCard({ task, onToggleDone, onDelete, onEdit, onToggleStep, onDismis
                           border: "none", background: "transparent",
                           fontSize: 12.5, color: sDone ? "var(--ink-4)" : "var(--ink-2)",
                           textDecoration: sDone ? "line-through" : "none",
-                          textAlign: sRtl ? "right" : "left",
+                          textAlign: "start",
                           direction: sRtl ? "rtl" : "ltr",
                           cursor: "pointer",
                           fontFamily: sRtl ? "Heebo, var(--font-sans)" : "inherit",

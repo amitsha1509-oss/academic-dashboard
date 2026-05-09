@@ -664,11 +664,15 @@ def get_history(user: auth.User = Depends(auth.get_current_user)):
     def _week_of(iso_or_date) -> int:
         if iso_or_date is None:
             return 0
-        d = (
-            iso_or_date if hasattr(iso_or_date, "year")
-            else date.fromisoformat(str(iso_or_date)[:10])
-        )
-        return ((d - sem_start).days // 7) + 1
+        raw = iso_or_date
+        if hasattr(raw, "date"):          # datetime → date
+            d = raw.date()
+        elif hasattr(raw, "year"):        # already a date
+            d = raw
+        else:
+            d = date.fromisoformat(str(raw)[:10])
+        week = ((d - sem_start).days // 7) + 1
+        return week if 1 <= week <= 60 else 0   # discard corrupt dates
 
     out = []
     for r in recurring:

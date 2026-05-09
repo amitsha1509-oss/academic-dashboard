@@ -90,7 +90,7 @@ def main() -> int:
 
     rows = []
     for text, expected_cat, expected_mode in CASES:
-        got = keyword_classifier.classify(text)
+        got = keyword_classifier.classify(text, user_keywords=keyword_classifier.KEYWORDS)
 
         if expected_mode == "code":
             if got is None:

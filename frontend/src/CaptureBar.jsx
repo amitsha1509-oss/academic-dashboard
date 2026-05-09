@@ -160,7 +160,7 @@ function CaptureBar({ onCreate, onStartManual, classifying, seedRef, noCourses }
               padding: "16px 0",
               fontFamily: rtl ? "Heebo, var(--font-sans)" : "var(--font-sans)",
               direction: rtl ? "rtl" : "ltr",
-              textAlign: rtl ? "right" : "left",
+              textAlign: "start",
               minWidth: 0,
             }}
           />

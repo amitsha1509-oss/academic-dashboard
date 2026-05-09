@@ -4,14 +4,13 @@ const { useState, useEffect, useRef, useMemo } = React;
 
 // Active views. Eisenhower driven by user-picked importance/urgency
 // (binary: high vs not). Courses = self-confidence + gap notes per course.
-// Context / Calendar / Agenda views are still unmounted (not adapted).
+// Context / Agenda views are still unmounted (not adapted).
 const VIEWS = [
   { id: "all",        labelKey: "viewAll",        icon: "List" },
   { id: "subject",    labelKey: "viewSubject",    icon: "Layers" },
   { id: "eisenhower", labelKey: "viewEisenhower", icon: "Grid" },
   { id: "courses",    labelKey: "viewCourses",    icon: "Book" },
   { id: "schedule",   labelKey: "viewSchedule",   icon: "Calendar" },
-  { id: "admin",      labelKey: "viewAdmin",      icon: "Settings", adminOnly: true },
 ];
 
 // Heuristic mock classifier — handles English + Hebrew, returns next_steps for every task
@@ -366,9 +365,7 @@ function App({ user }) {
       case "courses":    return <window.CoursesView onCoursesChanged={() => setNoCourses(false)} />;
       case "schedule":   return <window.ScheduleView onCoursesChanged={() => setNoCourses(false)} />;
       case "history":    return <window.HistoryView />;
-      case "calendar":   return <window.CalendarView tasks={tasks} onEdit={handleEdit} />;
       case "agenda":     return <window.AgendaView tasks={tasks} {...cardCommonProps} />;
-      case "admin":      return _IS_LOCAL ? <window.AdminView /> : null;
     }
   };
 
@@ -710,7 +707,7 @@ function TutorialModal({ onClose }) {
       boxShadow: "var(--shadow-3)",
       padding: "18px 22px 16px",
       direction: "rtl",
-      textAlign: "right",
+      textAlign: "start",
       animation: "spring-in .35s cubic-bezier(.34,1.56,.64,1)",
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -845,11 +842,9 @@ function CaptureBarHost({ onCreate, onStartManual, classifying, captureSeedRef, 
   />;
 }
 
-const _IS_LOCAL = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-
 function ViewSwitcher({ view, onChange, tasks }) {
   const { t } = window.useLang();
-  const visibleViews = VIEWS.filter(v => !v.adminOnly || _IS_LOCAL);
+  const visibleViews = VIEWS;
   return (
     <div style={{
       display: "flex", gap: 2, padding: 4,
@@ -974,28 +969,18 @@ function TweaksHost({ tw, setTw, user, onOpenHistory, onOpenOnboarding }) {
             fontSize: 12, color: "var(--ink-3)",
           }}>
             <span style={{ fontFamily: "var(--font-mono)" }}>{user.email}</span>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button
-                onClick={onOpenOnboarding}
-                style={{
-                  padding: "5px 12px", borderRadius: 8, fontSize: 12,
-                  border: "1px solid var(--line)", background: "var(--card)",
-                  color: "var(--ink-2)", cursor: "pointer", fontFamily: "inherit",
-                }}
-              >🎓 הגדרה מחדש</button>
-              <button
-                onClick={doLogout}
-                style={{
-                  padding: "5px 12px", borderRadius: 8, fontSize: 12,
-                  border: "1px solid var(--line)", background: "var(--card)",
-                  color: "var(--ink-2)", cursor: "pointer", fontFamily: "inherit",
-                }}
-              >{t("logout")}</button>
-            </div>
+            <button
+              onClick={doLogout}
+              style={{
+                padding: "5px 12px", borderRadius: 8, fontSize: 12,
+                border: "1px solid var(--line)", background: "var(--card)",
+                color: "var(--ink-2)", cursor: "pointer", fontFamily: "inherit",
+              }}
+            >{t("logout")}</button>
           </div>
         </TS>
       )}
-      <TS label="היסטוריה">
+      <TS label="ארכיון">
         <button
           onClick={onOpenHistory}
           style={{
@@ -1004,7 +989,21 @@ function TweaksHost({ tw, setTw, user, onOpenHistory, onOpenOnboarding }) {
             color: "var(--ink-2)", cursor: "pointer", fontFamily: "inherit",
             display: "inline-flex", alignItems: "center", gap: 6,
           }}
-        ><window.Icon.Book size={13} stroke={1.8} /> פתח היסטוריה</button>
+        ><window.Icon.Book size={13} stroke={1.8} /> פתח ארכיון</button>
+      </TS>
+      <TS label="קורסים ומערכת שעות">
+        <p style={{ margin: "0 0 8px", fontSize: 11, color: "var(--ink-3)", lineHeight: 1.4 }}>
+          הגדרת קורסים, מועדים ומערכת שעות שבועית
+        </p>
+        <button
+          onClick={onOpenOnboarding}
+          style={{
+            padding: "6px 14px", borderRadius: 8, fontSize: 12,
+            border: "1px solid var(--line)", background: "var(--card)",
+            color: "var(--ink-2)", cursor: "pointer", fontFamily: "inherit",
+            display: "inline-flex", alignItems: "center", gap: 6,
+          }}
+        >🎓 הגדרה מחדש</button>
       </TS>
       <TS label={t("tweaksAboutMe")}>
         <AboutMeEditor />

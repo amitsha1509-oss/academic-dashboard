@@ -76,8 +76,9 @@ const IMPORTANCE_COLOR = { high: "var(--imp-high)", medium: "var(--imp-med)", lo
 // ─── Subject chip ───────────────────────────────────────────
 function SubjectChip({ subject, size = "md" }) {
   const base = window.SUBJECT_META[subject] || window.SUBJECT_META["כללי"] || { icon: "Book", color: "#6B7280", bg: "#F3F4F6", mid: "#9CA3AF" };
-  const meta = window.SUBJECT_META[subject] ? base : { ...base, label: subject };
-  const Ico = window.Icon[meta.icon];
+  const meta = window.SUBJECT_META[subject] ? base : { ...base, label: subject || "כללי" };
+  if (!meta.label) meta.label = subject || "כללי";
+  const Ico = window.Icon[meta.icon] || window.Icon.Book;
   const small = size === "sm";
   return (
     <span style={{
@@ -91,6 +92,7 @@ function SubjectChip({ subject, size = "md" }) {
       letterSpacing: ".01em",
       lineHeight: 1.2,
       whiteSpace: "nowrap",
+      direction: "ltr",
     }}>
       <Ico size={small ? 10 : 11} stroke={2.2} />
       {meta.label}
@@ -144,8 +146,8 @@ function LevelChip({ kind, value }) {
       fontSize: 11, fontWeight: isHigh ? 600 : 400,
       lineHeight: 1.2,
     }}>
-      <span style={{ width: 4, height: 4, borderRadius: 999, background: color, flexShrink: 0 }} />
       {label}
+      <span style={{ width: 4, height: 4, borderRadius: 999, background: color, flexShrink: 0 }} />
     </span>
   );
 }
@@ -166,6 +168,7 @@ function TimeChip({ iso, urgent = false }) {
       fontSize: 11,
       fontWeight: 500,
       lineHeight: 1.2,
+      direction: "ltr",
     }}>
       <Clock size={10} stroke={2} />
       {relTime(iso)}

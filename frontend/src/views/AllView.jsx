@@ -41,7 +41,7 @@ function EmptyState({ onPick }) {
             <button key={e} onClick={() => onPick?.(e)} dir={eRtl ? "rtl" : "ltr"} style={{
               padding: "10px 14px", borderRadius: 10, fontSize: 13.5,
               border: "1px dashed var(--line-strong)", background: "transparent",
-              color: "var(--ink-2)", textAlign: eRtl ? "right" : "left",
+              color: "var(--ink-2)", textAlign: "start",
               fontFamily: eRtl ? "Heebo, var(--font-sans)" : "inherit",
             }}>
               "{e}"

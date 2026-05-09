@@ -254,7 +254,7 @@ function OnboardingWizard({ onComplete }) {
         borderRadius: 20,
         boxShadow: "var(--shadow-3)",
         padding: "28px 28px 24px",
-        direction: "rtl", textAlign: "right",
+        direction: "rtl", textAlign: "start",
         animation: "spring-in .35s cubic-bezier(.34,1.56,.64,1)",
         maxHeight: "90vh",
         overflowY: "auto",

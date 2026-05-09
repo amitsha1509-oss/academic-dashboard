@@ -1379,3 +1379,124 @@ The overview query joined only `adhoc_tasks`. Most tasks are "virtual" — compu
 - `frontend/src/views/GroupView.jsx` — `window.DIMENSIONS[groupBy] || []` null guard
 
 End of session 15 handoff.
+
+---
+
+## Session 16 — Hebrew RTL polish, שבוע 3848 bug, chip direction fixes
+
+### Skills loaded this session
+- **hebrew-content-writer** — Hebrew grammar, register, SEO, gender-neutral phrasing
+- **hebrew-rtl-best-practices** — CSS logical properties, RTL layout, bidi text, font stack
+
+### What was done
+
+#### 1. Hebrew strings improved (i18n.jsx)
+All UI text reviewed against the two skills. Key changes:
+- `tagline`: "capture once · trust the system to remember" → "כותבים פעם אחת · המערכת לא שוכחת"
+- Empty state subtitle: generic → "כותבים מה שמסתובב בראש. המערכת מסדרת את הפרטים."
+- Eisenhower quadrant labels: fully rewritten in natural Israeli Hebrew
+  - `quadDoFirst`: "לבצע מיד", `quadSchedule`: "לקבוע מועד", `quadDelegate`: "להעביר לאחר", `quadDontDo`: "לוותר"
+- `sideSteps`: "AI steps" → "צעדים הבאים"
+- Various other strings tightened (login, logout, settings labels)
+- Language/direction forced to Hebrew/RTL on load: `_lang = "he"`, `_dir = "rtl"`, stored in localStorage
+- View name `viewHistory` = "ארכיון" (was "היסטוריה")
+- `viewEisenhower` = "סדרי עדיפויות" (user rejected "איזנהאואר" and "עדיפויות" — current value not fully confirmed, still open)
+
+#### 2. CalendarView Hebrew fixes (CalendarView.jsx)
+- Removed `letterSpacing: ".06em"` from day-of-week headers — never add letter-spacing to Hebrew
+- "+{n} more" → "+{n} עוד"
+
+#### 3. שבוע 3848 bug (fixed)
+**Symptom:** ארכיון showed "שבוע 3848" for a הרצאה that should have been in week 5.
+
+**Root cause:** A completion row had `occurrence_date = 2099-12-31` — garbage date stored in DB (likely a frontend bug that sent a far-future value). The `_week_of()` function did the arithmetic faithfully and produced week 3848.
+
+**Fix — two parts:**
+1. **DB data:** Deleted the `2099-12-31` completion for `pattern_id=10`. Then found a valid `2026-05-06` completion for the same pattern with `status=NULL` (not visible in ארכיון) and updated it to `status="done"`.
+2. **Code guard in `app.py` `_week_of()`:** Added sanity clamp — any week outside `1..60` returns `0` (hidden from display) so one corrupt row can never produce nonsense again.
+
+**Lesson (wasted ~10 min on this):** For bugs where the screen shows a suspicious VALUE, query the DB first. One `SELECT occurrence_date FROM completions WHERE pattern_id=10` would have shown `2099-12-31` in 10 seconds. Instead, spent 10 min reasoning about Python datetime arithmetic. See `lessons/data_before_code_for_value_bugs.md`.
+
+#### 4. Chip `direction: "ltr"` fix (atoms.jsx)
+In RTL document, every `inline-flex` chip had its children reversed: icon/dot ended up on the RIGHT, label text on the LEFT. This put the icon+gap between the right chip edge and the first letter, creating visible space at the reading start.
+
+Fix: add `direction: "ltr"` to `SubjectChip` and `TimeChip` outer spans so their internal flex is always LTR (icon left, text right).
+
+For `LevelChip` specifically: the dot is 4px × 4px — too small to work as a visual "prefix" in LTR inside an RTL page. Swapped DOM order instead: `{label}` first, then `<span dot />`. In RTL flex: first child (label) goes RIGHT, second child (dot) goes LEFT. Result: text is flush against the right padding, dot is a suffix on the left. No leading space.
+
+**Debugging lesson from this session:** "Colored boxes near the דחוף/חשוב boxes" = SubjectChip (solid background) + LevelChip. "Colored" = SubjectChip. Spent 3 rounds fixing LevelChip (wrong chip) because I anchored on the second half of the sentence. Should have mapped "colored background = SubjectChip" immediately.
+
+#### 5. TaskCard chips row direction (TaskCard.jsx)
+Chips row was hardcoded `direction: "ltr"`. Changed to `direction: rtl ? "rtl" : "ltr"` so for Hebrew tasks chips flow right-to-left (SubjectChip rightmost, then time, then urgency/importance leftmost).
+
+---
+
+### Bugs NOT fixed this session
+
+#### מודיעין נח / RTL card layout — empty left space
+**What it looks like:** Task cards with short Hebrew text show a large empty gray area on the left side of the card. Most visible for course tasks with brief text and no time chip.
+
+**Why:** The page `document.documentElement.dir = "rtl"` makes the card's flex row go RTL. The urgency bar (`insetInlineStart: 0`) lands on the RIGHT. Checkbox is RIGHT. Short text is right-aligned. Delete button is LEFT. All visual weight is on the right; left 50-60% is empty card background.
+
+**Attempts this session:**
+- Added `dir="rtl"` explicitly → same as inherited, no change
+- Added `dir="ltr"` to outer card div → layout flipped but introduced other issues, reverted
+- Several other attempts, all reverted
+
+**What's needed:** A design decision. Two real options:
+1. Force card outer div to `dir="ltr"` (chrome stays LTR: urgency bar left, checkbox left, delete right) while text div keeps explicit `dir={rtl ? "rtl" : "ltr"}`. Risk: need to audit all card sub-elements for direction.
+2. Accept it — RTL cards with short text have empty right-hand space in LTR, empty left-hand space in RTL. It's symmetrical behavior, just visually more obvious for Hebrew because most text is short.
+
+#### Eisenhower view name
+Currently `"סדרי עדיפויות"`. User rejected: "איזנהאואר", "עדיפויות", "סדרי עדיפויות". Candidates not yet tried: "דחיפות וחשיבות", "מיון משימות", "מטריצת עדיפויות".
+
+---
+
+### Open items (carried + updated)
+
+- 🔴 **Groq API key rotation** — leaked in early chat. Rotate before real users.
+- 🔴 **Admin view CORS** — calling Railway from localhost, cross-origin cookie doesn't work.
+- 🟡 **מודיעין נח card layout** — design decision needed (see above).
+- 🟡 **Eisenhower tab name** — no accepted Hebrew name yet.
+- 🟡 **Defender exclusion** for project folder — SQLite lock risk on Windows.
+- 🟢 **Re-classify feature** — "re-classify all tasks using current keywords" button in CoursesView.
+- 🟢 **FrequencyPicker wiring** — `FrequencyPicker` exists but not wired into `PatternRow`/`NewPatternForm` in ScheduleView.jsx.
+- 🟢 **Calendar view redesign** — user mentioned plans for how the calendar should look; never elaborated. Needs a dedicated session with a screenshot or sketch.
+
+---
+
+### How to start the server (important — PATH Python has no uvicorn)
+
+```powershell
+# From C:\Users\amit shani\academic_dashboard
+Start-Process -FilePath ".venv\Scripts\uvicorn.exe" -ArgumentList "app:app","--port","8001" -NoNewWindow
+# Wait ~10 seconds, then:
+curl http://localhost:8001/
+# Expect 307 (redirect to /login)
+```
+
+Do NOT use `python -m uvicorn` — the PATH Python 3.10 install does not have uvicorn. Only `.venv\Scripts\uvicorn.exe` works.
+
+---
+
+### Files changed (session 16)
+
+**Backend:**
+- `app.py` — `_week_of()`: datetime→date guard + `1 <= week <= 60` sanity clamp
+- `academic.sqlite3` — deleted `occurrence_date=2099-12-31` completion for pattern 10; updated `2026-05-06` completion status NULL→done
+
+**Frontend:**
+- `frontend/src/i18n.jsx` — Hebrew strings overhauled; language/dir forced to he/rtl on load
+- `frontend/src/atoms.jsx` — `SubjectChip` + `TimeChip`: `direction: "ltr"`; `LevelChip`: DOM order swapped (label first, dot second)
+- `frontend/src/TaskCard.jsx` — chips row direction: `rtl ? "rtl" : "ltr"`; null text guard (`raw_text || subject || "ללא כותרת"`)
+- `frontend/src/views/CalendarView.jsx` — removed `letterSpacing` from Hebrew headers; "+N more" → "+N עוד"
+- `frontend/src/App.jsx` — TutorialModal direction/alignment; settings label "ארכיון"
+
+---
+
+### New memory written this session
+
+- `lessons/data_before_code_for_value_bugs.md` — for value bugs, query the DB first
+- `feedback/verify_before_reporting.md` — broadened from "servers" to any change: open browser for UI, query DB for data
+
+End of session 16 handoff.

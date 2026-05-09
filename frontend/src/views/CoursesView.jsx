@@ -225,8 +225,9 @@ function CourseCard({ cat, onPatch, saving, allCats }) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ gap_notes: text }),
-      keepalive: true,  // survive page unload / SPA navigation
-    }).catch(() => { /* swallow — best effort */ });
+      credentials: "include",
+      keepalive: true,
+    }).catch(() => {});
   };
 
   const onChangeNotes = (e) => {
