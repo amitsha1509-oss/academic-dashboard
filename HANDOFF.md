@@ -1,11 +1,28 @@
 # Academic Dashboard — Session Handoff
 
-**Date saved:** 2026-04-30 (end of session 5)
+**Date saved:** 2026-05-10 (end of session 19)
 **Project root:** `C:\Users\amit shani\academic_dashboard\`
-**DB file:** `academic.sqlite3` (backup at `academic.sqlite3.pre-multiuser-backup`)
-**Status:** Multi-user backend + login UI working. **Session 5 added a feedback feature (table + endpoints + floating button).** Real Google OAuth setup is **paused mid-walkthrough at Cloud Console Step 1**. Render free tier ruled out for SQLite (no persistent disk). See §3 and §11.
+**DB file:** `academic.sqlite3`
+**Live URL:** Railway (auto-deploys from `main` on GitHub)
+**Current version:** v5 — commit `53ab312`
+**Status:** Deployed and working. Onboarding redesigned, urgency bugs fixed, security hardened.
 
-This is the authoritative resume document. If you (or a future Claude session) come back after a break, read top to bottom and you can pick up cleanly.
+This is the authoritative resume document. Read top to bottom to pick up cleanly.
+
+---
+
+## Git versions (rollback reference)
+
+| Version | Commit | What it contains | Tag |
+|---------|--------|-----------------|-----|
+| **v5** ← live | `53ab312` | Onboarding redesign, urgency fixes, security hardening, schedule tip | — |
+| v4 | `05116a6` | Recurring task urgency/importance editable per-occurrence | `v4-pre-onboarding` |
+| v3 | `45ac713` | RTL polish, Hebrew strings, admin + calendar tabs removed | — |
+| v2 | `eaa2a29` | Multi-user, Google OAuth, onboarding, AI hardening, 12 bug fixes | — |
+| v1 | `60b526b` | Initial Railway-ready deploy | — |
+
+**To roll back on Railway:** `git revert HEAD --no-edit && git push origin main`
+**Or:** Railway dashboard → Deployments → click the old deployment → Redeploy
 
 ---
 
@@ -1777,3 +1794,35 @@ Third card color also changed from `#9B6BC8` to `#5BAD6F` (matches preset color 
 3. Tutorial (any step > 0): button row is [הקודם RIGHT] [הבא LEFT]
 
 End of session 19 handoff.
+
+---
+
+## Current state — v5 (what's live right now)
+
+### What works end-to-end
+- **New user flow:** sign in with Google → onboarding wizard (welcome preview + course setup) → tutorial opens automatically → schedule tip appears after 3rd task
+- **Task capture:** free-text → AI classifies (category + urgency + importance + due date) → falls back to manual if AI fails
+- **Recurring patterns:** weekly/biweekly schedule, per-occurrence urgency/importance editing that sticks (no longer reset by due-date escalation)
+- **Views:** All tasks, By Course, Eisenhower matrix, Courses (confidence + notes), Schedule (pattern editor)
+- **Settings:** theme, semester dates, "about me" for AI context — all per-user
+- **Multi-user:** Google OAuth, per-user data isolation, per-user localStorage prefix
+
+### Known dead code (harmless, clean up later)
+- `ScheduleStep` component and `newPattern()` in `OnboardingWizard.jsx` — kept in case the schedule step is re-added to the wizard
+- `KIND_OPTIONS` / `DAY_OPTIONS` constants in `OnboardingWizard.jsx` — same reason
+
+### Two directions for next sessions
+
+**Direction 1 — Getting people IN (entry funnel)**
+The onboarding is now much cleaner. Still open:
+- Error messages that make sense to a non-technical user
+- Admin tools so Amit can inspect/reset a friend's account
+- "Empty state" on day 1 — what does a brand new user see before adding any tasks?
+
+**Direction 2 — Product depth (for users already in)**
+- Calendar view: make it beautiful, then add Google Calendar read/write
+- Better debugging: re-classify a task, fix bad AI output
+- Pattern improvements: biweekly frequency UI, more pattern kinds
+- History/archive view
+
+**Rule:** Fix Direction 1 problems before adding Direction 2 features. A more powerful app that new users can't figure out is not progress.
