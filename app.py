@@ -352,12 +352,19 @@ def get_settings(user: auth.User = Depends(auth.get_current_user)) -> dict:
     return {r["key"]: r["value"] for r in rows}
 
 
+_ALLOWED_SETTING_KEYS = {
+    "theme", "semester_start", "semester_end", "dashboard_start_date",
+    "current_week", "user_context", "kind_priorities",
+}
+
 @app.patch("/settings/{key}")
 def set_setting(
     key: str,
     payload: dict,
     user: auth.User = Depends(auth.get_current_user),
 ) -> dict:
+    if key not in _ALLOWED_SETTING_KEYS:
+        raise HTTPException(400, f"unknown setting key: {key!r}")
     if "value" not in payload:
         raise HTTPException(400, "payload must include 'value'")
     value = str(payload["value"])

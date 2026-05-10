@@ -130,6 +130,7 @@ function App({ user }) {
   const [showTutorial, setShowTutorial] = useState(false);
   const [noCourses, setNoCourses] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showScheduleTip, setShowScheduleTip] = useState(false);
   const captureSeedRef = useRef(null);
 
   // Load tasks + categories on mount. Categories must come first so SubjectChip
@@ -159,7 +160,7 @@ function App({ user }) {
         window.DIMENSIONS.subject = cats.map(c => c.name);
         setNoCourses(cats.length === 0);
         setTasks(fromApi);
-        if (cats.length === 0 && !window.userStorage.get("onboarding.v1.done")) {
+        if (cats.length === 0) {
           setShowOnboarding(true);
         } else if (!window.userStorage.get("tutorial.v1.seen")) {
           setShowTutorial(true);
@@ -224,6 +225,12 @@ function App({ user }) {
         _isNew: true,
       };
       setTasks(t => [newTask, ...t]);
+      // After 3rd task entry: nudge about recurring schedule feature
+      if (!window.userStorage.get("tips.scheduleTip.dismissed")) {
+        const n = parseInt(window.userStorage.get("tips.taskCount") || "0", 10) + 1;
+        window.userStorage.set("tips.taskCount", n);
+        if (n === 3) setShowScheduleTip(true);
+      }
       if (guess.next_steps && guess.next_steps.length) {
         setFreshIds(m => ({ ...m, [newTask.id]: true }));
         setTimeout(() => {
@@ -297,6 +304,11 @@ function App({ user }) {
           time_value: draft.time_value,
         });
         setTasks(ts => [{ ...created, _isNew: true, completed_steps: [] }, ...ts]);
+        if (!window.userStorage.get("tips.scheduleTip.dismissed")) {
+          const n = parseInt(window.userStorage.get("tips.taskCount") || "0", 10) + 1;
+          window.userStorage.set("tips.taskCount", n);
+          if (n === 3) setShowScheduleTip(true);
+        }
       } catch (e) {
         console.warn("manual create failed:", e.message);
         alert(window.t("alertCreateFailed") + ": " + e.message);
@@ -489,9 +501,16 @@ function App({ user }) {
       <TutorialButton onOpen={() => setShowTutorial(true)} />
       <FeedbackButton />
       {showTutorial && <TutorialModal onClose={closeTutorial} />}
+      {showScheduleTip && !showTutorial && !showOnboarding && (
+        <ScheduleTip
+          onClose={() => { window.userStorage.set("tips.scheduleTip.dismissed", "1"); setShowScheduleTip(false); }}
+          onGoToSchedule={() => { setView("schedule"); window.userStorage.set("tips.scheduleTip.dismissed", "1"); setShowScheduleTip(false); }}
+        />
+      )}
       {showOnboarding && (
         <window.OnboardingWizard onComplete={() => {
           setShowOnboarding(false);
+          setShowTutorial(true);
           window.claudeAPI.listCategories().then(cats => {
             cats.forEach(cat => {
               if (!window.SUBJECT_META[cat.name]) {
@@ -659,24 +678,24 @@ function FeedbackButton() {
 const TUTORIAL_STEPS = [
   {
     title: "ברוכים הבאים 👋",
-    body: "שלושה צעדים קצרים — ואז המערכת עובדת לבד.",
+    body: "שלושה דברים קצרים — ואז המערכת עובדת לבד.",
     icon: "Sparkles",
   },
   {
-    title: "1 — קורסים ומילות מפתח",
-    body: "בלשונית המודגשת תוכל להוסיף קורסים, לערוך צבעים ולהוסיף מילות מפתח (שם מרצה, קיצורים) — כדי שה-AI יסווג נכון.",
+    title: "1 — הגדרת קורסים",
+    body: "בלשונית 🎯 קורסים מוסיפים קורסים, עורכים צבעים ומוסיפים מילות מפתח (שם מרצה, קיצורים) — כדי שה-AI יסווג נכון.",
     icon: "Book",
     target: "courses",
   },
   {
     title: "2 — מערכת שעות",
-    body: "הרצאות, תרגולים ושיעורי בית קבועים מוגדרים כאן — ויווצרו אוטומטית כל שבוע. אפשר לערוך ולהוסיף בכל עת.",
+    body: "הרצאות ותרגולים שחוזרים כל שבוע? מגדירים אותם פעם אחת — ומכאן הם מופיעים לבד מדי שבוע.",
     icon: "Calendar",
     target: "schedule",
   },
   {
-    title: "3 — הוסף משימות חד-פעמיות",
-    body: "שורה זו — למשימות שמופיעות פעם אחת: \"תרגיל 3 סטטיסטיקה עד שישי\". משימות חוזרות (הרצאה, תרגול, שיעורי בית) → מערכת שעות.",
+    title: "3 — משימות חד-פעמיות",
+    body: "כאן כותבים משימות שמופיעות פעם אחת: \"תרגיל 3 סטטיסטיקה עד שישי\". הרצאות ותרגולים קבועים שייכים למערכת שעות.",
     icon: "Pencil",
     target: "capture",
   },
@@ -750,16 +769,8 @@ function TutorialModal({ onClose }) {
         color: "var(--ink-2)",
       }}>{cur.body}</p>
 
+      {/* Footer: הקודם first → lands on the right in RTL; הבא second → left; dots opposite side */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", gap: 5 }}>
-          {TUTORIAL_STEPS.map((_, i) => (
-            <div key={i} style={{
-              width: i === step ? 16 : 5, height: 5, borderRadius: 999,
-              background: i === step ? "var(--accent)" : "var(--line)",
-              transition: "all .2s ease",
-            }} />
-          ))}
-        </div>
         <div style={{ display: "flex", gap: 6 }}>
           {step > 0 && (
             <button
@@ -780,7 +791,52 @@ function TutorialModal({ onClose }) {
             }}
           >{isLast ? "סיום" : "הבא"}</button>
         </div>
+        <div style={{ display: "flex", gap: 5 }}>
+          {TUTORIAL_STEPS.map((_, i) => (
+            <div key={i} style={{
+              width: i === step ? 16 : 5, height: 5, borderRadius: 999,
+              background: i === step ? "var(--accent)" : "var(--line)",
+              transition: "all .2s ease",
+            }} />
+          ))}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function ScheduleTip({ onClose, onGoToSchedule }) {
+  return (
+    <div style={{
+      position: "fixed",
+      bottom: 120,
+      insetInlineEnd: 20,
+      zIndex: 200,
+      maxWidth: 290,
+      background: "var(--card)",
+      border: "1px solid var(--line)",
+      borderRadius: 14,
+      boxShadow: "var(--shadow-3)",
+      padding: "14px 16px",
+      direction: "rtl",
+      textAlign: "start",
+      animation: "spring-in .35s cubic-bezier(.34,1.56,.64,1)",
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", marginBottom: 4, letterSpacing: ".05em", textTransform: "uppercase" }}>טיפ</div>
+          <div style={{ fontSize: 12.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
+            יש לך הרצאות קבועות? הגדר אותן פעם אחת — המשימות ייווצרו לבד כל שבוע.
+          </div>
+        </div>
+        <button onClick={onClose} style={{ border: "none", background: "transparent", color: "var(--ink-4)", fontSize: 18, cursor: "pointer", padding: 0, lineHeight: 1, flexShrink: 0 }}>×</button>
+      </div>
+      <button
+        onClick={onGoToSchedule}
+        style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "none", background: "var(--ink)", color: "var(--paper)", cursor: "pointer", fontFamily: "inherit" }}
+      >
+        למערכת שעות ←
+      </button>
     </div>
   );
 }

@@ -29,7 +29,7 @@ function nextColor() {
 }
 
 function newCourse()  { return { id: Math.random(), name: "", color: nextColor() }; }
-function newPattern() { return { id: Math.random(), courseIdx: 0, kind: "lecture", day_of_week: null, start_time: "" }; }
+function newPattern() { return { id: Math.random(), courseIdx: 0, kind: "lecture", day_of_week: null, start_time: "", end_time: "" }; }
 
 // ─── shared style tokens ────────────────────────────────────────────────
 const inputSt = (w) => ({
@@ -140,13 +140,26 @@ function ScheduleStep({ patterns, setPatterns, courses }) {
             <option value="">יום</option>
             {DAY_OPTIONS.map(d => <option key={d.v} value={d.v}>{d.label}</option>)}
           </select>
-          <input
-            type="time"
-            value={p.start_time}
-            onChange={e => patch(p.id, "start_time", e.target.value)}
-            style={inputSt(100)}
-            placeholder="שעה"
-          />
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ fontSize: 11, color: "var(--ink-3)", whiteSpace: "nowrap" }}>התחלה</span>
+            <input
+              type="time"
+              value={p.start_time}
+              onChange={e => patch(p.id, "start_time", e.target.value)}
+              style={inputSt(96)}
+            />
+          </div>
+          {(p.kind === "lecture" || p.kind === "tutorial") && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: 11, color: "var(--ink-3)", whiteSpace: "nowrap" }}>סיום</span>
+              <input
+                type="time"
+                value={p.end_time}
+                onChange={e => patch(p.id, "end_time", e.target.value)}
+                style={inputSt(96)}
+              />
+            </div>
+          )}
           <button
             onClick={() => remove(p.id)}
             style={{ border: "none", background: "transparent", color: "var(--ink-4)", fontSize: 18, cursor: "pointer", lineHeight: 1, padding: "0 4px", marginInlineStart: "auto" }}
@@ -162,79 +175,51 @@ function ScheduleStep({ patterns, setPatterns, courses }) {
 
 // ─── Main wizard ────────────────────────────────────────────────────────
 function OnboardingWizard({ onComplete }) {
-  const [step, setStep]       = React.useState(0);  // 0=welcome 1=courses 2=schedule 3=saving
+  const [step, setStep]       = React.useState(0);  // 0=welcome 1=courses 2=saving
   const [courses, setCourses] = React.useState([newCourse()]);
-  const [patterns, setPatterns] = React.useState([]);
   const [error, setError]     = React.useState(null);
 
   const validCourses = courses.filter(c => c.name.trim());
 
   const skip = () => {
     window.userStorage.set("onboarding.v1.done", true);
-    window.userStorage.set("tutorial.v1.seen", true);
     onComplete();
   };
 
   const save = async () => {
-    setStep(3);
+    setStep(2);
     setError(null);
     try {
-      // Fetch existing courses first to avoid duplicates on re-open
       const existingCats = await window.claudeAPI.listCategories();
       const existingByName = {};
       existingCats.forEach(c => { existingByName[c.name.trim().toLowerCase()] = c.id; });
 
-      const savedIds = {}; // name → id
       for (const c of validCourses) {
         const name = c.name.trim();
-        const existingId = existingByName[name.toLowerCase()];
-        if (existingId) {
-          savedIds[name] = existingId;
-          continue;
-        }
-        const cat = await window.claudeAPI.createCategory({
+        if (existingByName[name.toLowerCase()]) continue;
+        await window.claudeAPI.createCategory({
           name,
           color_dark: c.color.replace("#", ""),
           keywords: "",
         });
-        savedIds[name] = cat.id;
-      }
-      for (const p of patterns) {
-        const course = validCourses[p.courseIdx];
-        if (!course) continue;
-        const catId = savedIds[course.name.trim()];
-        if (!catId) continue;
-        await window.claudeAPI.createPattern({
-          category_id: catId,
-          kind: p.kind,
-          label: KIND_OPTIONS.find(k => k.v === p.kind)?.label || p.kind,
-          day_of_week: p.day_of_week,
-          start_time: p.start_time || null,
-          is_required: p.kind !== "hw",
-        });
       }
       window.userStorage.set("onboarding.v1.done", true);
-      window.userStorage.set("tutorial.v1.seen", true);
       onComplete();
     } catch (e) {
       const msg = e?.message || String(e);
       setError("שגיאה בשמירה — " + (msg.includes("409") ? "קורס עם שם זה כבר קיים" : msg));
-      setStep(2);
+      setStep(1);
     }
   };
 
   const STEPS = [
     {
-      title: "ברוך הבא לאקדמיה 🎓",
-      sub: "שתי שאלות קצרות — ואנחנו נדאג שהמערכת תעבוד בשבילך מהרגע הראשון.",
+      title: "ברוכים הבאים לאקדמיה 🎓",
+      sub: "שאלה קצרה אחת — ואפשר להתחיל מיד.",
     },
     {
-      title: "אילו קורסים אתה לומד?",
-      sub: "שם + צבע לכל קורס — ה-AI ישתמש בהם לסווג כל משימה אוטומטית.",
-    },
-    {
-      title: "מה חוזר כל שבוע?",
-      sub: "הרצאות, תרגולים, שיעורי בית — בחר קורס, סוג, יום ושעה. המשימות ייוצרו לבד.",
+      title: "אילו קורסים יש לך?",
+      sub: "שם וצבע לכל קורס — ה-AI יסווג לפיהם את המשימות אוטומטית.",
     },
   ];
 
@@ -262,7 +247,7 @@ function OnboardingWizard({ onComplete }) {
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <div style={{ display: "flex", gap: 5 }}>
-            {[0, 1, 2].map(i => (
+            {[0, 1].map(i => (
               <div key={i} style={{
                 width: i === step ? 18 : 6, height: 6, borderRadius: 999,
                 background: i === step ? "var(--accent)" : i < step ? "var(--ink-3)" : "var(--line)",
@@ -270,7 +255,7 @@ function OnboardingWizard({ onComplete }) {
               }} />
             ))}
           </div>
-          {step < 3 && (
+          {step < 2 && (
             <button onClick={skip} style={{ border: "none", background: "transparent", color: "var(--ink-4)", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
               דלג
             </button>
@@ -279,9 +264,9 @@ function OnboardingWizard({ onComplete }) {
 
         {/* Title */}
         <h2 style={{ margin: "14px 0 6px", fontSize: 22, fontWeight: 700, color: "var(--ink)" }}>
-          {step === 3 ? "שומר…" : cur.title}
+          {step === 2 ? "שומר…" : cur.title}
         </h2>
-        {step !== 3 && (
+        {step !== 2 && (
           <p style={{ margin: "0 0 20px", fontSize: 13, color: "var(--ink-3)", lineHeight: 1.6 }}>
             {cur.sub}
           </p>
@@ -289,23 +274,32 @@ function OnboardingWizard({ onComplete }) {
 
         {/* Step content */}
         {step === 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <p style={{ margin: 0, fontSize: 14, color: "var(--ink)", lineHeight: 1.7, fontWeight: 500 }}>
-              ענה על שתי שאלות פשוטות — ואנחנו נארגן לך את האקדמיה כולה במקום אחד.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ fontSize: 13, color: "var(--ink-2)", lineHeight: 1.6 }}>
+              כותבים משימה — ה-AI מסווג אותה לקורס הנכון לבד. כך נראה הלוח:
+            </div>
+            {/* Mini dashboard preview */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               {[
-                { icon: "📚", title: "הקורסים שלך", text: "שם + צבע לכל קורס. ה-AI מסווג משימות לקורס הנכון אוטומטית." },
-                { icon: "🗓️", title: "לוח שעות קבוע", text: "הרצאות, תרגולים ושיעורי בית — יווצרו כמשימות כל שבוע לבד." },
-              ].map((r, i) => (
-                <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 12px", background: "var(--paper)", borderRadius: 10, border: "1px solid var(--line)" }}>
-                  <span style={{ fontSize: 18, lineHeight: 1.3 }}>{r.icon}</span>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)", marginBottom: 2 }}>{r.title}</div>
-                    <div style={{ fontSize: 12, color: "var(--ink-3)" }}>{r.text}</div>
-                  </div>
+                { color: "#4F86C6", title: "תרגיל 3 — להגיש עד יום ראשון", tag: "חשבון", urgency: null },
+                { color: "#E07B54", title: "לקרוא פרק 4 לפני ההרצאה", tag: "פיזיקה", urgency: null },
+                { color: "#5BAD6F", title: "לסכם הרצאה מהשבוע", tag: "כלכלה", urgency: null },
+              ].map((task, i) => (
+                <div key={i} style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  background: "var(--paper)", borderRadius: 8,
+                  padding: "8px 10px",
+                  border: "1px solid var(--line)",
+                  borderInlineStart: `3px solid ${task.color}`,
+                }}>
+                  <div style={{ flex: 1, fontSize: 12.5, color: "var(--ink)" }}>{task.title}</div>
+                  <span style={{ fontSize: 11, color: "white", background: task.color, borderRadius: 4, padding: "1px 7px", whiteSpace: "nowrap" }}>{task.tag}</span>
+                  {task.urgency && <span style={{ fontSize: 11, color: "var(--urg-high)", fontWeight: 600 }}>{task.urgency}</span>}
                 </div>
               ))}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--ink-3)" }}>
+              כל מה שצריך — שם וצבע לכל קורס. השאר קורה לבד.
             </div>
           </div>
         )}
@@ -313,12 +307,9 @@ function OnboardingWizard({ onComplete }) {
           <CoursesStep courses={courses} setCourses={setCourses} />
         )}
         {step === 2 && (
-          <ScheduleStep patterns={patterns} setPatterns={setPatterns} courses={courses} />
-        )}
-        {step === 3 && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--ink-3)", fontSize: 13, padding: "10px 0" }}>
             <div style={{ width: 18, height: 18, borderRadius: 999, border: "2px solid var(--accent)", borderTopColor: "transparent", animation: "thinking-dot 1s linear infinite" }} />
-            שומר קורסים ומשימות…
+            שומר קורסים…
           </div>
         )}
 
@@ -326,25 +317,16 @@ function OnboardingWizard({ onComplete }) {
           <div style={{ color: "var(--urg-high)", fontSize: 12, marginTop: 8 }}>{error}</div>
         )}
 
-        {/* Footer buttons */}
-        {step < 3 && (
+        {/* Footer: הקודם first → lands on the right in RTL; primary second → left */}
+        {step < 2 && (
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-start", marginTop: 22 }}>
             {step > 0 && (
               <button onClick={() => setStep(s => s - 1)} style={btnSecondary}>הקודם</button>
             )}
             {step === 0 && (
-              <button onClick={() => setStep(1)} style={btnPrimary}>בואים נתחיל ←</button>
+              <button onClick={() => setStep(1)} style={btnPrimary}>בואו נתחיל ←</button>
             )}
             {step === 1 && (
-              <button
-                onClick={() => setStep(2)}
-                disabled={validCourses.length === 0}
-                style={{ ...btnPrimary, opacity: validCourses.length === 0 ? 0.4 : 1 }}
-              >
-                הבא ←
-              </button>
-            )}
-            {step === 2 && (
               <button
                 onClick={save}
                 disabled={validCourses.length === 0}

@@ -1461,7 +1461,7 @@ Currently `"סדרי עדיפויות"`. User rejected: "איזנהאואר", "�
 - 🟡 **Defender exclusion** for project folder — SQLite lock risk on Windows.
 - 🟢 **Re-classify feature** — "re-classify all tasks using current keywords" button in CoursesView.
 - 🟢 **FrequencyPicker wiring** — `FrequencyPicker` exists but not wired into `PatternRow`/`NewPatternForm` in ScheduleView.jsx.
-- 🟢 **Calendar view redesign** — user mentioned plans for how the calendar should look; never elaborated. Needs a dedicated session with a screenshot or sketch.
+- 🟢 **Calendar feature** — see Session 17 for the full vision. Architecture and logic still need design before building.
 
 ---
 
@@ -1499,4 +1499,281 @@ Do NOT use `python -m uvicorn` — the PATH Python 3.10 install does not have uv
 - `lessons/data_before_code_for_value_bugs.md` — for value bugs, query the DB first
 - `feedback/verify_before_reporting.md` — broadened from "servers" to any change: open browser for UI, query DB for data
 
-End of session 16 handoff.
+---
+
+## Session 17 — Cleanup, recurring-task fix, Railway deployment, calendar vision
+
+### Git version history
+
+| Tag | Commit | What it contains |
+|-----|--------|-----------------|
+| v1  | first deploy | First Railway deploy — life_dashboard UI adapted, basic auth working |
+| v2  | session 14 state | Multi-user backend, Google OAuth (Test mode), per-user data isolation |
+| v3  | session 15 state | Schedule view, per-kind is_required, recurring vs adhoc split |
+| v4  | session 16 state | Hebrew RTL polish, שבוע 3848 fix, chip direction fixes |
+| v5  | `05116a6` | ★ **Live on Railway now** — recurring-task urgency/importance fix + AdminView/CalendarView deleted |
+
+To restore any version: `git checkout v3` (read-only) or `git checkout -b restore-v3 v3` (new branch).
+
+### What was done
+
+#### 1. AdminView deleted (frontend only)
+`frontend/src/views/AdminView.jsx` removed. It called `/admin/overview` cross-origin from localhost (broken due to CORS + cookie). The backend `/admin/overview` route and the HTML admin panel (`/admin/`) are **untouched** — only the React tab is gone. Removed from: `App.jsx` (VIEWS array + case), `index.html` (script tag), `i18n.jsx` (viewAdmin string).
+
+#### 2. CalendarView deleted (frontend only)
+`frontend/src/views/CalendarView.jsx` removed entirely. Was a leftover from life_dashboard, never properly adapted. Removed from: `App.jsx`, `index.html`, `i18n.jsx` (viewCalendar string). A new, purpose-built calendar will replace it — see Calendar Vision below.
+
+#### 3. Benchmark classifier fix
+`benchmark_classifier.py` line 93 was calling `classify(text)` with no `user_keywords`. After the multi-user refactor, `classify()` defaults `effective_keywords = {}`, so all course-specific inputs returned "כללי". Fix: `classify(text, user_keywords=keyword_classifier.KEYWORDS)`. Benchmark: 10/28 → 28/28.
+
+#### 4. Recurring task urgency/importance fix (critical bug)
+**Symptom:** Editing urgency or importance on a recurring task had no effect (no visible save, no error shown, changes lost).
+
+**Root cause:** `handleSaveEdit` in `App.jsx` passed the full `editable` object (including `raw_text` and `subject`) to `patchTask`. `_toBackPatch` converted these to `title` and `category_id`. The backend rejected them for recurring tasks because `title` and `category_id` are NOT in `_COMPLETION_UPDATE_COLUMNS` — it returned 400, which the frontend silently swallowed.
+
+**Fix in `App.jsx` `handleSaveEdit`:**
+```javascript
+const { id, status, created_at, next_steps, completed_steps, _isNew, ...editable } = draft;
+if (draft._source === "recurring") {
+  delete editable.raw_text;
+  delete editable.subject;
+}
+```
+For recurring tasks, the title and category live on the pattern and cannot change per-occurrence. Stripping them means only `importance`, `urgency`, `scheduled_at`, `notes`, `place` flow to the backend — exactly `_COMPLETION_UPDATE_COLUMNS`.
+
+#### 5. i18n fix: viewSchedule missing from English
+`viewSchedule: "Schedule"` was absent from `STRINGS.en`. Latent bug (language is hardcoded to Hebrew), but correctness gap. Added.
+
+---
+
+### Calendar Vision (recorded 2026-05-09)
+
+The user's stated goals for the calendar feature, in priority order:
+
+1. **Beautiful UI** — the calendar must look good and be easy to scan at a glance. Not a raw grid.
+2. **Pull from Google Calendar** — read events from the user's Google Calendar and display them alongside tasks.
+3. **Push to Google Calendar** — write back to Google Calendar (two-way sync).
+4. **Show tasks from this app** — recurring + adhoc tasks entered in the academic dashboard appear on the calendar.
+5. **Logic TBD** — how the four data sources (Google Calendar events, recurring patterns, adhoc tasks, schedule patterns) interact is still being thought through. Needs a dedicated design session before building.
+
+**Library candidate:** FullCalendar (identified via research). Has RTL support via `direction: 'rtl'`, Hebrew locale plugin, UMD builds compatible with the current Babel-in-browser setup. Alternatives: react-big-calendar, Schedule-X.
+
+**Before starting calendar work:** Have a design session to answer:
+- What exactly shows on the calendar? (All tasks? Only timed ones? Events + tasks merged?)
+- How does Google Calendar OAuth work alongside the existing session auth?
+- One-way pull vs true two-way conflict resolution?
+
+---
+
+### Open items (updated from session 16)
+
+- 🔴 **Groq API key rotation** — leaked in early chat. Rotate before real users.
+- 🔴 **Google OAuth** — still in DEV_MODE=1. See §3 and `OAUTH_SETUP.md`.
+- 🟡 **מודיעין נח card layout** — design decision needed (see session 16).
+- 🟡 **Eisenhower tab name** — no accepted Hebrew name yet.
+- 🟡 **Defender exclusion** for project folder — SQLite lock risk on Windows.
+- 🟢 **Calendar feature** — vision captured above. Design session needed before coding.
+- 🟢 **Re-classify feature** — "re-classify all tasks using current keywords" button in CoursesView.
+- 🟢 **FrequencyPicker wiring** — exists but not wired into PatternRow/NewPatternForm.
+
+---
+
+### Files changed (session 17)
+
+**Backend:** none
+
+**Frontend:**
+- `frontend/src/views/AdminView.jsx` — DELETED
+- `frontend/src/views/CalendarView.jsx` — DELETED
+- `frontend/src/App.jsx` — removed AdminView + CalendarView from VIEWS + render switch; fixed `handleSaveEdit` to strip `raw_text`/`subject` for recurring tasks
+- `frontend/src/i18n.jsx` — removed viewAdmin/viewCalendar strings; added viewSchedule to STRINGS.en
+- `frontend/index.html` — removed script tags for AdminView.jsx and CalendarView.jsx
+
+**Tools / scripts:**
+- `benchmark_classifier.py` — fixed `classify()` call to pass `user_keywords=keyword_classifier.KEYWORDS`
+
+End of session 17 handoff.
+
+---
+
+## Session 18 — Onboarding improvements
+
+### Changes made
+
+- **`frontend/src/App.jsx`** — wizard now shows whenever `cats.length === 0`, regardless of the skip flag. Previously, clicking "דלג" set a localStorage flag and the wizard never appeared again — even if the user still had 0 courses.
+- **`frontend/src/OnboardingWizard.jsx`:**
+  - **Option A:** Removed the schedule step entirely. Wizard is now 2 steps: welcome → courses → save. Users add recurring patterns later from the Schedule tab when they understand the app.
+  - **Option B:** Replaced the generic welcome screen with a mini live-looking dashboard preview: 3 example task cards with colored course chips, showing what the app looks like once set up. Text: "כתוב משימה — ה-AI מבין לאיזה קורס היא שייכת ומסדר אותה לבד."
+  - End-time field added to schedule patterns for lecture/tutorial kinds (labeled "התחלה" / "סיום"). Backend already supported it — was just missing from the UI. Relevant if the schedule step is re-added later.
+
+### Onboarding still in wizard (kept)
+- `ScheduleStep` component kept in `OnboardingWizard.jsx` (dead code now) in case the schedule step is re-added later. Delete it if that never happens.
+
+---
+
+## Two development directions
+
+These are meaningfully different types of work. Keep them separate when planning sessions.
+
+### Direction 1 — Getting people IN (entry funnel)
+
+The app works. The problem is new users can't see that from the outside — they hit friction before they find the value.
+
+Work in this direction:
+- Better onboarding (this session: preview, schedule step removed)
+- Simpler setup (fewer decisions before first value)
+- Proof-of-value upfront (show what the app does before asking for effort)
+- DB / admin tools so Amit can help friends inspect or reset their account
+- Error messages that make sense to a non-technical user
+- Better "empty state" — what does a brand new user see on day 1?
+
+**Why it matters:** Doing Direction 2 while Direction 1 is broken builds a more powerful app that new users still can't figure out. Fix entry first.
+
+### Direction 2 — Making it better for users already IN (product depth)
+
+Work for users who already use the app daily and want more.
+
+Work in this direction:
+- Calendar feature (vision captured in session 17)
+- Better debugging tools for tasks (re-classify, fix bad AI outputs)
+- More views or filters
+- Pattern improvements (frequency, biweekly)
+- Performance / reliability
+
+**Why it matters:** These only pay off once you have users past the entry friction. Don't skip Direction 1 to get here early.
+
+---
+
+## Session 18 additions (same day as session 17)
+
+### Bug fixes
+
+**1. Tutorial not showing after onboarding wizard**
+
+Root cause: `save()` and `skip()` in `OnboardingWizard.jsx` both called `window.userStorage.set("tutorial.v1.seen", true)` before calling `onComplete()`. The tutorial was marked as seen before it ever showed. The App's `useEffect` already ran on mount, so it could never re-trigger the tutorial.
+
+Fix:
+- Removed `tutorial.v1.seen` from both `save()` and `skip()` in `OnboardingWizard.jsx`
+- Added `setShowTutorial(true)` in App.jsx's `onComplete` callback, right after `setShowOnboarding(false)`
+
+**2. Preview card colored border not rendering**
+
+In the onboarding welcome step, each fake task card had:
+```js
+borderInlineStart: `3px solid ${color}`,
+border: "1px solid var(--line)",      // ← overwrote borderInlineStart
+borderInlineStartWidth: 3,
+```
+`border` (shorthand) came after `borderInlineStart` and reset the inline-start border to 1px gray. Fixed by reordering: `border` first, `borderInlineStart` second.
+
+**3. compute.py urgency escalation overriding user edits**
+
+Found during testing: `if due_at and due_at.date() <= (now + timedelta(days=1)).date(): urgency = 5` fired for ALL same-day tasks, including lectures/tutorials where `due_at` is set to the end-of-class time. Even after a user patched urgency via EditDialog, the escalation immediately overwrote it.
+
+Fix: Only escalate when the user has NOT set a custom urgency on this occurrence:
+```python
+if comp_dict.get("urgency") is None and due_at and ...:
+    urgency = 5
+```
+
+### Schedule tip feature
+
+After a user enters their 3rd task, a small dismissible tip card appears at `insetInlineEnd: 20, bottom: 120` (above the `?` tutorial button) pointing to the Schedule tab.
+
+- Counter tracked in `userStorage` key `tips.taskCount`
+- Dismissed permanently with `tips.scheduleTip.dismissed = "1"`
+- Hidden if tutorial or onboarding wizard is open
+- "למערכת שעות ←" button switches to schedule view and dismisses
+- Component: `ScheduleTip` in `App.jsx`, rendered just after `TutorialModal`
+
+### Hebrew UX improvements (skills: hebrew-rtl-best-practices + hebrew-content-writer)
+
+**Register applied:** UX/Interface — direct, gender-neutral, present-tense plural (colloquial).
+
+**OnboardingWizard.jsx:**
+| Before | After | Reason |
+|--------|-------|--------|
+| "ברוך הבא לאקדמיה" | "ברוכים הבאים לאקדמיה" | Gender-neutral plural welcome |
+| "ותוכל להתחיל לעבוד מיד" | "ואפשר להתחיל מיד" | תוכל is masculine; ואפשר is neutral |
+| "כתוב משימה" | "כותבים משימה" | Imperative masculine → present plural (neutral) |
+| "אילו קורסים אתה לומד?" | "אילו קורסים יש לך?" | Less gendered, more natural |
+| "שם + צבע … ה-AI ישתמש בהם" | "שם וצבע … ה-AI יסווג לפיהם" | More natural Hebrew; "לפיהם" flows better |
+| "כל מה שצריך זה לתת שם" | "כל מה שצריך — שם וצבע" | Cleaner, no filler |
+| "בואים נתחיל ←" | "בואו נתחיל ←" | בואו is correct imperative plural; בואים is colloquial/wrong |
+
+**RTL button order (wizard footer):** Primary button now comes first in DOM → lands on the RIGHT (inline-start) in RTL. "הקודם" (secondary) follows → lands on the LEFT. This matches Israeli app convention (primary action on the reading-start side).
+
+**TUTORIAL_STEPS in App.jsx:**
+| Step | Before | After |
+|------|--------|-------|
+| 0 body | "שלושה צעדים קצרים" | "שלושה דברים קצרים" |
+| 1 title | "1 — קורסים ומילות מפתח" | "1 — הגדרת קורסים" |
+| 1 body | "בלשונית המודגשת תוכל להוסיף" | "בלשונית 🎯 קורסים מוסיפים" — removes gendered "תוכל", names the tab |
+| 2 body | "מוגדרים כאן — ויווצרו" | "מגדירים אותם פעם אחת — ומכאן הם מופיעים" — active, neutral |
+| 3 title | "3 — הוסף משימות חד-פעמיות" | "3 — משימות חד-פעמיות" — removes masculine imperative |
+| 3 body | "שורה זו — למשימות" | "כאן כותבים משימות" — cleaner, neutral |
+
+**RTL button order (tutorial footer):** Swapped DOM order — "הבא/סיום" (primary) now renders first → RIGHT in RTL. Progress dots moved to second position → LEFT. Matches standard RTL navigation convention.
+
+### Files changed (session 18)
+
+- `frontend/src/OnboardingWizard.jsx` — tutorial.v1.seen removed from save/skip; Hebrew text improved; border fix; wizard footer button order (primary first = right in RTL)
+- `frontend/src/App.jsx` — setShowTutorial(true) in onComplete; TUTORIAL_STEPS Hebrew + button order; ScheduleTip component + render; showScheduleTip state + taskCount increment in handleCreate; compute.py urgency escalation fix
+
+**Backend:**
+- `compute.py` — urgency escalation now checks `comp_dict.get("urgency") is None` before overriding
+
+### What to check in browser
+1. Sign in as a new user (0 courses) → onboarding wizard appears → complete it → tutorial opens automatically
+2. Enter 3 tasks → schedule tip appears bottom-right
+3. Edit urgency/importance on a recurring task → value sticks (no longer reset to 5)
+4. Onboarding welcome screen: colored left accent borders visible on the 3 preview task cards
+
+End of session 18 handoff.
+
+---
+
+## Session 19 — Button order + welcome preview fix (2026-05-10)
+
+**Status:** Local only. NOT deployed to Railway. Do not deploy until Amit says so.
+
+### Changes made
+
+**1. Button order — הקודם before הבא everywhere**
+
+User request: "הקודם should be before הבא on all places."
+
+In RTL flex, the FIRST element in DOM lands on the RIGHT. "Before" in RTL = to the right.
+So הקודם should be first in DOM → RIGHT, and the primary action second → LEFT.
+
+This is the OPPOSITE of what session 18 did (session 18 put primary first for "standard RTL convention"). User preference wins.
+
+Files changed:
+- `frontend/src/OnboardingWizard.jsx` — footer now: `{step > 0 && הקודם}` then `{primary}`. Comment updated.
+- `frontend/src/App.jsx` — tutorial footer inner button group now: `{step > 0 && הקודם}` then `{הבא/סיום}`. Comment updated.
+
+**2. Welcome preview — generic course names**
+
+User: "the example page on sign up is weird."
+
+The 3 preview task cards used Amit's personal course abbreviations (לינארית, פייתון, ערבית), which look out of place for any other user.
+
+Replaced with universally recognizable Israeli university courses:
+| Before | After |
+|--------|-------|
+| "תרגיל בית — מטריצות הפיכות" / לינארית | "תרגיל 3 — להגיש עד יום ראשון" / חשבון |
+| "לקרוא פרק 5 לפני הרצאה" / פייתון | "לקרוא פרק 4 לפני ההרצאה" / פיזיקה |
+| "לחזור על מילים חדשות" / ערבית | "לסכם הרצאה מהשבוע" / כלכלה |
+
+Third card color also changed from `#9B6BC8` to `#5BAD6F` (matches preset color index 2, more variety).
+
+### Files changed (session 19)
+- `frontend/src/OnboardingWizard.jsx` — button order (הקודם first); welcome preview task cards
+- `frontend/src/App.jsx` — tutorial button order (הקודם first)
+
+### What to check in browser
+1. Onboarding welcome step: preview shows חשבון / פיזיקה / כלכלה, all looking generic
+2. Onboarding step 1 (courses): with 2+ courses present, button row is [הקודם RIGHT] [שמור LEFT]
+3. Tutorial (any step > 0): button row is [הקודם RIGHT] [הבא LEFT]
+
+End of session 19 handoff.

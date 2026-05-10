@@ -272,8 +272,10 @@ def compute_tasks(
             )
             place = comp_dict.get("place") or DEFAULT_PLACE.get(p["kind"])
 
-            # Due-date escalation: anything due today or tomorrow → always urgent.
-            if due_at and due_at.date() <= (now + timedelta(days=1)).date():
+            # Due-date escalation: anything due today or tomorrow → escalate to urgent.
+            # Skipped when the user has explicitly set urgency for this occurrence —
+            # their override wins. Only applies when urgency came from the default chain.
+            if comp_dict.get("urgency") is None and due_at and due_at.date() <= (now + timedelta(days=1)).date():
                 urgency = 5
 
             out.append(models.Task(
@@ -322,8 +324,9 @@ def compute_tasks(
             continue
 
         urgency = a.get("urgency")
-        # Due-date escalation: anything due today or tomorrow → always urgent.
-        if due and due.date() <= (now + timedelta(days=1)).date():
+        # Due-date escalation: anything due today or tomorrow → escalate to urgent.
+        # Only when the user hasn't explicitly set urgency (same guard as recurring tasks).
+        if a.get("urgency") is None and due and due.date() <= (now + timedelta(days=1)).date():
             urgency = 5
 
         out.append(models.Task(
