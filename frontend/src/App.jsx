@@ -306,6 +306,12 @@ function App({ user }) {
     }
     // Edit path: persist the changed dimension fields. Strip client-only.
     const { id, status, created_at, next_steps, completed_steps, _isNew, ...editable } = draft;
+    // Recurring tasks: title/category_id live on the pattern and can't change
+    // per-occurrence — strip them so the backend doesn't reject with 400.
+    if (draft._source === "recurring") {
+      delete editable.raw_text;
+      delete editable.subject;
+    }
     // Persist FIRST, then update local state on success — avoids "looks saved
     // but isn't" if the backend rejects the change.
     try {
