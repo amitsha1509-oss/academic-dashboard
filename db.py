@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS completions (
 CREATE TABLE IF NOT EXISTS adhoc_tasks (
     id            INTEGER PRIMARY KEY,
     user_id       INTEGER NOT NULL,
-    category_id   INTEGER NOT NULL,
+    category_id   INTEGER,
     title         TEXT NOT NULL,
     type          TEXT,
     place         TEXT,
@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS adhoc_tasks (
     status        TEXT DEFAULT 'open' CHECK (status IN ('open', 'done', 'skipped')),
     created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -314,6 +314,46 @@ def init_db():
                 "WHERE name=? AND (keywords IS NULL OR keywords='')",
                 (",".join(kw_list), course_name),
             )
+
+        # ─── Session 19 migration: adhoc_tasks category_id ON DELETE SET NULL ─
+        # Previously ON DELETE CASCADE meant deleting a category silently deleted
+        # all its tasks (including done ones), making them vanish from archive.
+        # Changed to ON DELETE SET NULL so historical tasks survive category deletion.
+        adhoc_create = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='adhoc_tasks'"
+        ).fetchone()
+        if adhoc_create and "ON DELETE CASCADE" in (adhoc_create["sql"] or ""):
+            conn.executescript("""
+                CREATE TABLE adhoc_tasks_new (
+                    id            INTEGER PRIMARY KEY,
+                    user_id       INTEGER NOT NULL,
+                    category_id   INTEGER,
+                    title         TEXT NOT NULL,
+                    type          TEXT,
+                    place         TEXT,
+                    importance    INTEGER CHECK (importance BETWEEN 1 AND 5),
+                    urgency       INTEGER CHECK (urgency BETWEEN 1 AND 5),
+                    release_at    DATETIME,
+                    due_at        DATETIME,
+                    scheduled_at  DATETIME,
+                    notes         TEXT,
+                    status        TEXT DEFAULT 'open' CHECK (status IN ('open', 'done', 'skipped')),
+                    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
+                );
+            """)
+            conn.execute("""
+                INSERT INTO adhoc_tasks_new
+                SELECT id, user_id, category_id, title, type, place,
+                       importance, urgency, release_at, due_at, scheduled_at,
+                       notes, status, created_at
+                FROM adhoc_tasks
+            """)
+            conn.executescript("""
+                DROP TABLE adhoc_tasks;
+                ALTER TABLE adhoc_tasks_new RENAME TO adhoc_tasks;
+            """)
 
         # ─── Indexes (run AFTER migrations so user_id columns exist) ────
         conn.executescript(INDEXES)

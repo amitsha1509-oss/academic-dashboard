@@ -646,10 +646,11 @@ def get_history(user: auth.User = Depends(auth.get_current_user)):
             SELECT comp.pattern_id, comp.occurrence_date, comp.status,
                    comp.notes, comp.updated_at,
                    p.kind, p.label,
-                   cat.name AS category_name, cat.color_dark
+                   COALESCE(cat.name, 'קורס מחוק') AS category_name,
+                   COALESCE(cat.color_dark, '6B7280') AS color_dark
             FROM completions comp
             JOIN recurring_patterns p ON p.id = comp.pattern_id
-            JOIN categories cat ON cat.id = p.category_id
+            LEFT JOIN categories cat ON cat.id = p.category_id
             WHERE comp.user_id=? AND comp.status IN ('done', 'skipped')
             ORDER BY comp.occurrence_date DESC
             """,
@@ -659,9 +660,10 @@ def get_history(user: auth.User = Depends(auth.get_current_user)):
         adhocs = c.execute(
             """
             SELECT t.id, t.title, t.type, t.status, t.created_at, t.due_at, t.notes,
-                   cat.name AS category_name, cat.color_dark
+                   COALESCE(cat.name, 'קורס מחוק') AS category_name,
+                   COALESCE(cat.color_dark, '6B7280') AS color_dark
             FROM adhoc_tasks t
-            JOIN categories cat ON cat.id = t.category_id
+            LEFT JOIN categories cat ON cat.id = t.category_id
             WHERE t.user_id=? AND t.status IN ('done', 'skipped')
             ORDER BY t.created_at DESC
             """,
@@ -704,7 +706,7 @@ def get_history(user: auth.User = Depends(auth.get_current_user)):
             "color": r["color_dark"],
             "title": r["title"],
             "kind": r["type"] or "adhoc",
-            "date": str(r["due_at"] or r["created_at"])[:10],
+            "date": str(r["due_at"] or r["created_at"] or "")[:10] or None,
             "week": _week_of(r["due_at"] or r["created_at"]),
             "status": r["status"],
             "notes": r["notes"],
@@ -833,6 +835,45 @@ def update_task(
         if cur.rowcount == 0:
             raise HTTPException(404, "task not found")
     return {"id": task_id, "updated": list(fields.keys())}
+
+
+@app.post("/tasks/{task_id}/restore")
+def restore_task(
+    task_id: str,
+    user: auth.User = Depends(auth.get_current_user),
+) -> dict:
+    """Restore a completed/skipped task back to open.
+
+    For recurring tasks: deletes the completion row so compute.py treats
+    the occurrence as open again.
+    For adhoc tasks: sets status back to 'open'.
+    """
+    parts = _parse_task_id(task_id)
+
+    if parts[0] == "r":
+        _, pattern_id, occ_date = parts
+        with db.connect() as c:
+            pat = c.execute(
+                "SELECT 1 FROM recurring_patterns WHERE id=? AND user_id=?",
+                (pattern_id, user.id),
+            ).fetchone()
+            if not pat:
+                raise HTTPException(404, "task not found")
+            c.execute(
+                "DELETE FROM completions WHERE pattern_id=? AND occurrence_date=? AND user_id=?",
+                (pattern_id, occ_date, user.id),
+            )
+        return {"id": task_id, "restored": True}
+
+    _, adhoc_id = parts
+    with db.connect() as c:
+        cur = c.execute(
+            "UPDATE adhoc_tasks SET status='open' WHERE id=? AND user_id=?",
+            (adhoc_id, user.id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(404, "task not found")
+    return {"id": task_id, "restored": True}
 
 
 @app.delete("/tasks/{task_id}")

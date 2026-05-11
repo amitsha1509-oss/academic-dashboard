@@ -1797,6 +1797,88 @@ End of session 19 handoff.
 
 ---
 
+## Session 20 — Archive restore feature + schema fix (2026-05-11)
+
+### What was done
+
+#### 1. Restore feature in archive (HistoryView)
+
+Users can now restore accidentally-completed tasks directly from the ארכיון tab.
+
+**Frontend (`frontend/src/views/HistoryView.jsx`):**
+- Each archive row now has a "שחזר" button (small bordered pill, right of the date)
+- While restoring: button shows "..." and is disabled
+- On success: row disappears immediately (no page reload)
+- On error: Hebrew alert with the error message
+
+**Backend (`app.py`) — new `POST /tasks/{id}/restore` endpoint:**
+- Recurring task (`r:P:D`): deletes the completion row → occurrence reappears as open in active task list
+- Adhoc task (`a:N`): sets `status = 'open'`
+- Authorization: pattern/task must belong to the requesting user (404 if not)
+- Idempotent: restoring an already-open recurring task returns 200 (no-op)
+
+**Why not PATCH `{status: "open"}`:** the `completions` table has a CHECK constraint `status IN ('done', 'skipped') OR status IS NULL` — "open" is not a valid completion status. The restore endpoint does the right thing for each source type.
+
+#### 2. Archive bugs fixed
+
+**Bug 1 — Done tasks vanishing when category is deleted (`INNER JOIN` → `LEFT JOIN`):**
+
+Root cause: both history queries used `INNER JOIN categories`. If a category was deleted (e.g. after an admin reset), the JOIN excluded all tasks from that category — they disappeared from the archive entirely. This was the cause of "I added a task and didn't see it in archive."
+
+Fix: changed to `LEFT JOIN categories` + `COALESCE(cat.name, 'קורס מחוק')` / `COALESCE(cat.color_dark, '6B7280')` in both the adhoc and recurring history queries.
+
+**Bug 2 — `ON DELETE CASCADE` deleting tasks when category deleted (schema migration):**
+
+Even with the LEFT JOIN fix, `adhoc_tasks.category_id` had `ON DELETE CASCADE` — so deleting a category physically deleted the task row before any query could run. The LEFT JOIN could never fire.
+
+Fix: schema migration in `db.py` (session 20 migration block) rebuilds `adhoc_tasks` to:
+- `category_id INTEGER` (nullable, was NOT NULL)
+- `FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL` (was CASCADE)
+
+Migration runs automatically on next server start via `db.init_db()`. Safe: detected by checking if `ON DELETE CASCADE` is in the current CREATE TABLE SQL; skips if already migrated.
+
+**Bug 3 — Week 0 showing as "שבוע 0":**
+
+Tasks outside the semester range (or with no date) landed in week 0 and showed under a "שבוע 0" header. Fixed: frontend now renders "ללא תאריך" for week 0.
+
+**Bug 4 — `str(None)[:10]` producing "None" string:**
+
+If an adhoc task had neither `due_at` nor `created_at` (shouldn't happen but defensive), the date field would be the string "None". Fixed with `str(...or "")[:10] or None`.
+
+#### 3. Test results (13/13 PASS)
+
+| Test | Result |
+|------|--------|
+| History returns 200 + non-empty list | PASS |
+| All items have required fields | PASS |
+| Status values only done/skipped | PASS |
+| Restore recurring | PASS |
+| Restore adhoc (done → open) | PASS |
+| Restore skipped adhoc | PASS |
+| Double restore (idempotent) | PASS |
+| Wrong user → 404 | PASS |
+| Bad ID → 400 | PASS |
+| Nonexistent → 404 | PASS |
+| Deleted category — task survives as "קורס מחוק" | PASS |
+| No-date task appears in history | PASS |
+| Restore skipped recurring | PASS |
+
+#### 4. Server management lesson learned
+
+`Start-Process -WindowStyle Hidden` from Claude's tools creates processes in a detached window that are invisible to `Get-Process` / `Stop-Process` / `taskkill` from subsequent tool calls. To kill them, use `Stop-Process -Name python -Force` or `Stop-Process -Name uvicorn -Force` (by name, not PID). Starting the server is always done by Claude's tools — not by the user — so the right kill command is by name, not PID.
+
+### Files changed (session 20)
+
+- `app.py` — `POST /tasks/{task_id}/restore`; history queries changed to LEFT JOIN + COALESCE; `str(None)` date fix
+- `db.py` — SCHEMA updated (category_id nullable, ON DELETE SET NULL); session 20 migration block added
+- `frontend/src/views/HistoryView.jsx` — "שחזר" button + handleRestore; week 0 → "ללא תאריך"
+
+### Status: local only. NOT deployed to Railway yet.
+
+Deploy when ready: `railway up --detach` from project root. The DB migration runs automatically on startup. No manual steps needed.
+
+---
+
 ## Current state — v5 (what's live right now)
 
 ### What works end-to-end
