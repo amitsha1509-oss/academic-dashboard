@@ -1,5 +1,10 @@
 # Academic Dashboard — Session Handoff
 
+> **Git state as of 2026-05-16:**
+> - `main` (local + origin + Railway) = `53ab312` (v5 — onboarding redesign, urgency fixes, security hardening)
+> - `experiment/calendar` branch (GitHub only) = all sessions 20-21 work: archive restore, schedule view additions, calendar-app scaffold, CALENDAR_HANDOFF.md. Not deployed. To resume: `git checkout experiment/calendar`.
+> - Railway auto-deploys from `main`. Force-push was used to reset origin/main from `a0fbcb6` → `53ab312`.
+
 **Date saved:** 2026-04-30 (end of session 5)
 **Project root:** `C:\Users\amit shani\academic_dashboard\`
 **DB file:** `academic.sqlite3` (backup at `academic.sqlite3.pre-multiuser-backup`)
