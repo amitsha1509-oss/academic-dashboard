@@ -154,6 +154,13 @@ class TaskUpdate(BaseModel):
     category_id: Optional[int] = None
 
 
+# ─── Calendar scheduling ─────────────────────────────────────────────
+class ScheduleTaskPayload(BaseModel):
+    """Body for POST /gcal/schedule/{task_id}."""
+    start: str  # ISO 8601 datetime string e.g. "2026-05-14T10:00:00+03:00"
+    end: str    # ISO 8601 datetime string
+
+
 # ─── Free-text capture ───────────────────────────────────────────────
 class CaptureRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)

@@ -1,0 +1,52 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Assistant', 'Heebo', system-ui, sans-serif;
+  background: #f8f9fa;
+  overflow: hidden;
+}
+
+#root {
+  width: 100%;
+  height: 100vh;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* FullCalendar RTL + Hebrew overrides */
+
+/* Prevent FullCalendar from double-applying RTL direction */
+.fc[dir="rtl"] .fc-toolbar {
+  direction: rtl;
+}
+
+/* Fix event text direction in RTL */
+.fc-event-title {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Tighten default FullCalendar padding in time grid */
+.fc .fc-timegrid-slot {
+  height: 2.5em;
+}
+
+/* Make the scrollable time grid fill the wrapper */
+.fc .fc-timegrid-body {
+  width: 100% !important;
+}
+
+/* Remove default FullCalendar border-radius on events for a cleaner look */
+.fc-event {
+  border-radius: 4px !important;
+}
+
+/* Dragging ghost */
+.fc-event.fc-event-dragging {
+  opacity: 0.75;
+}

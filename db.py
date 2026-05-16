@@ -355,6 +355,20 @@ def init_db():
                 ALTER TABLE adhoc_tasks_new RENAME TO adhoc_tasks;
             """)
 
+        # ─── Calendar migration: GCal token + calendar id on users ────
+        user_cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "gcal_access_token" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN gcal_access_token TEXT")
+        if "gcal_token_expiry" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN gcal_token_expiry TEXT")
+        if "gcal_calendar_id" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN gcal_calendar_id TEXT")
+
+        # gcal_event_id on adhoc_tasks — lets us update/delete the GCal event when task changes
+        adhoc_cols = {r["name"] for r in conn.execute("PRAGMA table_info(adhoc_tasks)").fetchall()}
+        if "gcal_event_id" not in adhoc_cols:
+            conn.execute("ALTER TABLE adhoc_tasks ADD COLUMN gcal_event_id TEXT")
+
         # ─── Indexes (run AFTER migrations so user_id columns exist) ────
         conn.executescript(INDEXES)
 

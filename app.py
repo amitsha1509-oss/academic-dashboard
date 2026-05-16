@@ -30,6 +30,7 @@ import auth
 import classifier
 import compute
 import db
+import gcal
 import keyword_classifier
 import models
 import groq as groq_lib
@@ -118,9 +119,92 @@ def auth_dev_users():
     return auth.dev_users()
 
 
+# ─── Google Calendar routes ─────────────────────────────────────────
+@app.get("/gcal/auth", include_in_schema=False)
+async def gcal_auth(request: Request, user: auth.User = Depends(auth.get_current_user)):
+    return await gcal.start_gcal_auth(request)
+
+
+@app.get("/gcal/callback", include_in_schema=False)
+async def gcal_callback(request: Request, user: auth.User = Depends(auth.get_current_user)):
+    return await gcal.handle_gcal_callback(request, user)
+
+
+@app.get("/gcal/status")
+def gcal_status(user: auth.User = Depends(auth.get_current_user)):
+    return gcal.get_gcal_status(user.id)
+
+
+@app.get("/gcal/events")
+async def gcal_events(
+    time_min: str,
+    time_max: str,
+    user: auth.User = Depends(auth.get_current_user),
+):
+    return await gcal.fetch_events(user.id, time_min, time_max)
+
+
+@app.post("/gcal/schedule/{task_id}")
+async def gcal_schedule(
+    task_id: int,
+    payload: models.ScheduleTaskPayload,
+    user: auth.User = Depends(auth.get_current_user),
+):
+    """Assign a time slot to a task and push it to Google Calendar."""
+    with db.connect() as c:
+        row = c.execute(
+            "SELECT id, title, gcal_event_id FROM adhoc_tasks WHERE id=? AND user_id=?",
+            (task_id, user.id),
+        ).fetchone()
+    if not row:
+        raise HTTPException(404, "task not found")
+
+    title = row["title"]
+    existing_event_id = row["gcal_event_id"]
+
+    if existing_event_id:
+        await gcal.update_event(user.id, existing_event_id, title, payload.start, payload.end)
+        gcal_event_id = existing_event_id
+    else:
+        gcal_event_id = await gcal.create_event(user.id, task_id, title, payload.start, payload.end)
+
+    with db.connect() as c:
+        c.execute(
+            "UPDATE adhoc_tasks SET scheduled_at=?, gcal_event_id=? WHERE id=? AND user_id=?",
+            (payload.start, gcal_event_id, task_id, user.id),
+        )
+    return {"ok": True, "gcal_event_id": gcal_event_id}
+
+
+@app.delete("/gcal/schedule/{task_id}")
+async def gcal_unschedule(
+    task_id: int,
+    user: auth.User = Depends(auth.get_current_user),
+):
+    """Remove time slot from a task and delete the GCal event."""
+    with db.connect() as c:
+        row = c.execute(
+            "SELECT gcal_event_id FROM adhoc_tasks WHERE id=? AND user_id=?",
+            (task_id, user.id),
+        ).fetchone()
+    if not row:
+        raise HTTPException(404, "task not found")
+
+    if row["gcal_event_id"]:
+        await gcal.delete_event(user.id, row["gcal_event_id"])
+
+    with db.connect() as c:
+        c.execute(
+            "UPDATE adhoc_tasks SET scheduled_at=NULL, gcal_event_id=NULL WHERE id=? AND user_id=?",
+            (task_id, user.id),
+        )
+    return {"ok": True}
+
+
 # ─── Static UI mounts ────────────────────────────────────────────────
 STATIC_DIR = Path(__file__).parent / "static"
 FRONTEND_DIR = Path(__file__).parent / "frontend"
+CALENDAR_DIR = Path(__file__).parent / "calendar-app" / "dist"
 STATIC_DIR.mkdir(exist_ok=True)
 
 class NoCacheStaticFiles(StaticFiles):
@@ -139,6 +223,8 @@ if (STATIC_DIR / "index.html").exists():
     app.mount("/ui", NoCacheStaticFiles(directory=str(STATIC_DIR), html=True), name="ui")
 if (FRONTEND_DIR / "index.html").exists():
     app.mount("/app", NoCacheStaticFiles(directory=str(FRONTEND_DIR), html=True), name="app")
+if CALENDAR_DIR.exists():
+    app.mount("/calendar", StaticFiles(directory=str(CALENDAR_DIR), html=True), name="calendar")
 
 
 @app.get("/", include_in_schema=False)

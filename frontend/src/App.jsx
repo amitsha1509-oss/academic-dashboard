@@ -939,6 +939,20 @@ function ViewSwitcher({ view, onChange, tasks }) {
           </button>
         );
       })}
+      <div style={{ width: 1, background: "var(--line)", margin: "4px 2px", flexShrink: 0 }} />
+      <a href="/calendar/" style={{
+        display: "inline-flex", alignItems: "center", gap: 7,
+        padding: "8px 14px", borderRadius: 9,
+        textDecoration: "none",
+        background: "transparent",
+        color: "var(--ink-3)",
+        fontSize: 13, fontWeight: 500,
+        transition: "all .15s ease",
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+      }}>
+        📅 לוח שנה
+      </a>
     </div>
   );
 }
