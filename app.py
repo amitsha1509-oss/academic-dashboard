@@ -17,7 +17,7 @@ from typing import Literal, Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -719,6 +719,7 @@ def get_history(user: auth.User = Depends(auth.get_current_user)):
 def list_tasks(
     scope: Literal["today", "week", "all"] = "today",
     user: auth.User = Depends(auth.get_current_user),
+    response: Response = None,
 ):
     """Return tasks visible at the current moment.
 
@@ -727,6 +728,8 @@ def list_tasks(
         week            — released or releasing within next 7 days
         all             — everything (recurring + adhoc, regardless of status)
     """
+    if response:
+        response.headers["Cache-Control"] = "no-store"
     return compute.compute_tasks(datetime.now(), scope=scope, user_id=user.id)
 
 

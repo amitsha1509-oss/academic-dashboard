@@ -133,44 +133,45 @@ function App({ user }) {
   const [showScheduleTip, setShowScheduleTip] = useState(false);
   const captureSeedRef = useRef(null);
 
-  // Load tasks + categories on mount. Categories must come first so SubjectChip
-  // has correct metadata for every course (including user-created ones) before
-  // the task list renders.
-  useEffect(() => {
-    (async () => {
-      try {
-        const [fromApi, cats] = await Promise.all([
-          window.claudeAPI.listTasks(),
-          window.claudeAPI.listCategories(),
-        ]);
-        cats.forEach(cat => {
-          if (!window.SUBJECT_META[cat.name]) {
-            window.SUBJECT_META[cat.name] = {
-              color: "#" + (cat.color_dark || "6B7280"),
-              icon: "Book",
-              label: cat.name,
-              bg: "#F3F4F6",
-              mid: "#9CA3AF",
-            };
-          }
-        });
-        // Keep DIMENSIONS.subject in sync with the DB so GroupView and
-        // EditDialog always show the full live course list, not the
-        // hardcoded list from data.jsx.
-        window.DIMENSIONS.subject = cats.map(c => c.name);
-        setNoCourses(cats.length === 0);
-        setTasks(fromApi);
-        if (cats.length === 0) {
-          setShowOnboarding(true);
-        } else if (!window.userStorage.get("tutorial.v1.seen")) {
-          setShowTutorial(true);
+  // Load tasks + categories. Called on mount and whenever the tab becomes
+  // visible again (catches stale state after switching apps on mobile).
+  const loadData = React.useCallback(async () => {
+    try {
+      const [fromApi, cats] = await Promise.all([
+        window.claudeAPI.listTasks(),
+        window.claudeAPI.listCategories(),
+      ]);
+      cats.forEach(cat => {
+        if (!window.SUBJECT_META[cat.name]) {
+          window.SUBJECT_META[cat.name] = {
+            color: "#" + (cat.color_dark || "6B7280"),
+            icon: "Book",
+            label: cat.name,
+            bg: "#F3F4F6",
+            mid: "#9CA3AF",
+          };
         }
-      } catch (e) {
-        console.error("Failed to load tasks from backend:", e);
-        setLoadError(String(e.message || e));
+      });
+      window.DIMENSIONS.subject = cats.map(c => c.name);
+      setNoCourses(cats.length === 0);
+      setTasks(fromApi);
+      if (cats.length === 0) {
+        setShowOnboarding(true);
+      } else if (!window.userStorage.get("tutorial.v1.seen")) {
+        setShowTutorial(true);
       }
-    })();
+    } catch (e) {
+      console.error("Failed to load tasks from backend:", e);
+      setLoadError(String(e.message || e));
+    }
   }, []);
+
+  useEffect(() => {
+    loadData();
+    const onVisible = () => { if (document.visibilityState === "visible") loadData(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [loadData]);
 
   // Apply theme + accent
   useEffect(() => {
@@ -245,11 +246,14 @@ function App({ user }) {
     const cur = tasks.find(x => x.id === id);
     const nowDone = cur && cur.status !== "done";
     const nextStatus = nowDone ? "done" : "open";
+    const prevStatus = cur ? cur.status : "open";
     setTasks(ts => ts.map(x => x.id === id ? { ...x, status: nextStatus } : x));
-    // Persist (best-effort; offline tasks have non-server ids and will 404).
-    window.claudeAPI.patchTask(id, { status: nextStatus }).catch(e =>
-      console.warn(`patch status failed for ${id}:`, e.message)
-    );
+    window.claudeAPI.patchTask(id, { status: nextStatus }).catch(e => {
+      console.warn(`patch status failed for ${id}:`, e.message);
+      // Rollback optimistic update and tell the user.
+      setTasks(ts => ts.map(x => x.id === id ? { ...x, status: prevStatus } : x));
+      alert("לא הצלחנו לשמור — נסה שוב (" + e.message + ")");
+    });
     if (tw.autoDeleteDone && nowDone) {
       // start fade after a brief delay so user sees the check
       setTimeout(() => {
@@ -269,10 +273,13 @@ function App({ user }) {
     }
   };
   const handleDelete = (id) => {
+    const removed = tasks.find(t => t.id === id);
     setTasks(ts => ts.filter(t => t.id !== id));
-    window.claudeAPI.deleteTask(id).catch(e =>
-      console.warn(`delete failed for ${id}:`, e.message)
-    );
+    window.claudeAPI.deleteTask(id).catch(e => {
+      console.warn(`delete failed for ${id}:`, e.message);
+      if (removed) setTasks(ts => [removed, ...ts]);
+      alert("לא הצלחנו למחוק — נסה שוב (" + e.message + ")");
+    });
   };
   const handleEdit = (t) => setEditing(t);
   // Open the edit dialog with a blank draft — used by "manual entry" path.
