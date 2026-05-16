@@ -1,9 +1,25 @@
 # Academic Dashboard — Session Handoff
 
-> **Git state as of 2026-05-16:**
-> - `main` (local + origin + Railway) = `53ab312` (v5 — onboarding redesign, urgency fixes, security hardening)
-> - `experiment/calendar` branch (GitHub only) = all sessions 20-21 work: archive restore, schedule view additions, calendar-app scaffold, CALENDAR_HANDOFF.md. Not deployed. To resume: `git checkout experiment/calendar`.
-> - Railway auto-deploys from `main`. Force-push was used to reset origin/main from `a0fbcb6` → `53ab312`.
+> **Session 2026-05-16 — what happened today:**
+>
+> **Git state:**
+> - `main` (local + origin + Railway) = `101026a` (mobile sync fix, on top of v5)
+> - `experiment/calendar` (GitHub only) = sessions 20-21 work: archive restore, schedule view, calendar-app. שחזור is here, NOT on Railway. Resume: `git checkout experiment/calendar`.
+>
+> **Bug fix shipped to Railway (commit `101026a`):**
+> - `visibilitychange` listener — app now refetches tasks every time the tab becomes visible (fixes stale state after switching apps on iPhone)
+> - Mutation rollback — `handleToggleDone` / `handleDelete` now rollback the UI and show a Hebrew alert if the API call fails (fixes silent optimistic failures)
+> - `Cache-Control: no-store` on `GET /tasks` — stops iOS Safari caching the task list
+> - NOTE: this was pushed to Railway without local verification first — rule going forward: local first, Amit verifies, then Railway.
+>
+> **Why homework from a few days ago reappeared on Railway:**
+> Those tasks were marked done in the UI via optimistic update, but the API call silently failed. The DB always had them as open. The new visibility refetch now shows the real server state. Mark them done manually — the new error alert will tell you if the save fails.
+>
+> **Next session — domain layer feature (plan approved):**
+> Plan at: `C:\Users\amit shani\.claude\plans\so-my-pain-is-joyful-cray.md`
+> Also sent to Ultraplan for refinement — check https://claude.ai/code/session_01Kj55qe1LDTKqYZhkccyfhi for the cloud version.
+> Summary: add `domains` table above categories (אקדמיה, בריאות, etc.), make `recurring_patterns.kind` nullable for non-academic habits, add "daily" day_of_week sentinel, add domain filter chips to main view, update GroupView/ScheduleView/CoursesView. Zero data loss — existing courses auto-migrate to "אקדמיה" domain.
+> Files to touch: `db.py`, `models.py`, `app.py`, `compute.py`, `claude-api.jsx`, `App.jsx`, new `DomainFilter.jsx`, `GroupView.jsx`, `ScheduleView.jsx`, `CoursesView.jsx`, `i18n.jsx`.
 
 **Date saved:** 2026-04-30 (end of session 5)
 **Project root:** `C:\Users\amit shani\academic_dashboard\`
