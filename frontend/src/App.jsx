@@ -262,8 +262,12 @@ function App({ user }) {
   const handleDelete = (id) => {
     const removed = tasks.find(t => t.id === id);
     setTasks(ts => ts.filter(t => t.id !== id));
-    window.claudeAPI.deleteTask(id).catch(e => {
-      console.warn(`delete failed for ${id}:`, e.message);
+    // Recurring tasks can't be deleted — skip them instead (keeps the pattern for future weeks).
+    const action = String(id).startsWith("r:")
+      ? window.claudeAPI.patchTask(id, { status: "skipped" })
+      : window.claudeAPI.deleteTask(id);
+    action.catch(e => {
+      console.warn(`delete/skip failed for ${id}:`, e.message);
       if (removed) setTasks(ts => [removed, ...ts]);
       alert("לא הצלחנו למחוק — נסה שוב (" + e.message + ")");
     });
