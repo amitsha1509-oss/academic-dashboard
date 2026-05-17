@@ -200,28 +200,15 @@ function App({ user }) {
       guess = await window.claudeAPI.classifyTask(raw, window.DIMENSIONS, opts);
       serverTask = window.__lastClassified;
     } catch (e) {
-      console.warn("Backend classify failed, using local heuristic:", e);
-      guess = classifyMock(raw);
-      serverTask = null;
+      console.warn("Backend classify failed:", e);
+      setClassifying(false);
+      alert("יצירת המשימה נכשלה — נסה שוב.\n(" + e.message + ")");
+      return;
     }
     {
-      const newTask = serverTask ? {
+      const newTask = {
         ...serverTask,
         next_steps: guess.next_steps || [],
-        completed_steps: [],
-        _isNew: true,
-      } : {
-        // Offline / heuristic fallback: keep a client-only task.
-        id: "offline:" + Date.now(),
-        raw_text: raw,
-        subject: guess.subject,
-        context: guess.context,
-        importance: guess.importance,
-        urgency: guess.urgency,
-        time_value: guess.time_value,
-        status: "open",
-        created_at: new Date(window.NOW).toISOString().slice(0, 19).replace("T", " "),
-        next_steps: guess.next_steps,
         completed_steps: [],
         _isNew: true,
       };
