@@ -65,6 +65,12 @@ app.add_middleware(
 
 # Initialize DB on startup (idempotent)
 db.init_db()
+# Startup diagnostic — confirms which DB path is live on Railway
+with db.connect() as _diag_conn:
+    _n_users = _diag_conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    _n_tasks = _diag_conn.execute("SELECT COUNT(*) FROM adhoc_tasks").fetchone()[0]
+    _n_patterns = _diag_conn.execute("SELECT COUNT(*) FROM recurring_patterns").fetchone()[0]
+    print(f"[startup] DB={db.DB_PATH} users={_n_users} adhoc={_n_tasks} patterns={_n_patterns}", flush=True)
 
 
 # ─── Daily backup ───────────────────────────────────────────────────
@@ -154,7 +160,18 @@ def root_redirect():
 # ─── Health ─────────────────────────────────────────────────────────
 @app.get("/healthz")
 def healthz() -> dict:
-    return {"ok": True, "version": app.version}
+    with db.connect() as c:
+        n_users = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        n_adhoc = c.execute("SELECT COUNT(*) FROM adhoc_tasks").fetchone()[0]
+        n_patterns = c.execute("SELECT COUNT(*) FROM recurring_patterns").fetchone()[0]
+    return {
+        "ok": True,
+        "version": app.version,
+        "db_path": str(db.DB_PATH),
+        "users": n_users,
+        "adhoc_tasks": n_adhoc,
+        "patterns": n_patterns,
+    }
 
 
 # ─── Categories ─────────────────────────────────────────────────────
