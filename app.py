@@ -621,6 +621,7 @@ def capture_task(
             ),
         )
         new_id = cur.lastrowid
+    print(f"[task created] user={user.id} id=a:{new_id} title={title!r} category={category_name!r}", flush=True)
 
     return models.Task(
         id=f"a:{new_id}",
@@ -832,6 +833,7 @@ def update_task(
                         f"INSERT INTO completions({', '.join(cols)}) VALUES({placeholders})",
                         vals,
                     )
+        print(f"[task patched] user={user.id} id={task_id} fields={list(completion_fields.keys())}", flush=True)
         return {"id": task_id, "updated": list(completion_fields.keys())}
 
     # adhoc
@@ -852,6 +854,7 @@ def update_task(
         )
         if cur.rowcount == 0:
             raise HTTPException(404, "task not found")
+        print(f"[task patched] user={user.id} id={task_id} fields={list(fields.keys())}", flush=True)
     return {"id": task_id, "updated": list(fields.keys())}
 
 
