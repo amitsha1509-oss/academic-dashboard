@@ -1,0 +1,125 @@
+@import "tailwindcss";
+@import "@fontsource-variable/heebo";
+
+/* Design tokens. Every color in the app comes from here; dark mode redefines them. */
+:root {
+  --canvas: #ffffff;
+  --sidebar: #f7f7f5;
+  --hover: rgba(55, 53, 47, 0.06);
+  --active: rgba(55, 53, 47, 0.1);
+  --ink: #37352f;
+  --muted: rgba(55, 53, 47, 0.65);
+  --faint: rgba(55, 53, 47, 0.4);
+  --line: rgba(55, 53, 47, 0.09);
+  --accent: #2383e2;
+  --danger: #e03e3e;
+  --popover: #ffffff;
+  --shadow: 0 0 0 1px rgba(15, 15, 15, 0.05), 0 3px 6px rgba(15, 15, 15, 0.1), 0 9px 24px rgba(15, 15, 15, 0.2);
+
+  --tag-gray-bg: #e3e2e0;   --tag-gray-fg: #32302c;
+  --tag-brown-bg: #eee0da;  --tag-brown-fg: #442a1e;
+  --tag-orange-bg: #fadec9; --tag-orange-fg: #49290e;
+  --tag-yellow-bg: #fdecc8; --tag-yellow-fg: #402c1b;
+  --tag-green-bg: #dbeddb;  --tag-green-fg: #1c3829;
+  --tag-teal-bg: #d3ecea;   --tag-teal-fg: #183a36;
+  --tag-blue-bg: #d3e5ef;   --tag-blue-fg: #183347;
+  --tag-purple-bg: #e8deee; --tag-purple-fg: #412454;
+  --tag-pink-bg: #f5e0e9;   --tag-pink-fg: #4c2337;
+  --tag-red-bg: #ffe2dd;    --tag-red-fg: #5d1715;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #191919;
+    --sidebar: #202020;
+    --hover: rgba(255, 255, 255, 0.055);
+    --active: rgba(255, 255, 255, 0.09);
+    --ink: rgba(255, 255, 255, 0.87);
+    --muted: rgba(255, 255, 255, 0.55);
+    --faint: rgba(255, 255, 255, 0.32);
+    --line: rgba(255, 255, 255, 0.09);
+    --accent: #529cca;
+    --danger: #ff7369;
+    --popover: #252525;
+    --shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 3px 6px rgba(0, 0, 0, 0.4), 0 9px 24px rgba(0, 0, 0, 0.5);
+
+    --tag-gray-bg: #373737;   --tag-gray-fg: rgba(255, 255, 255, 0.85);
+    --tag-brown-bg: #4a3228;  --tag-brown-fg: rgba(255, 255, 255, 0.85);
+    --tag-orange-bg: #5c3b23; --tag-orange-fg: rgba(255, 255, 255, 0.85);
+    --tag-yellow-bg: #564328; --tag-yellow-fg: rgba(255, 255, 255, 0.85);
+    --tag-green-bg: #243d30;  --tag-green-fg: rgba(255, 255, 255, 0.85);
+    --tag-teal-bg: #1f3f3d;   --tag-teal-fg: rgba(255, 255, 255, 0.85);
+    --tag-blue-bg: #143a4e;   --tag-blue-fg: rgba(255, 255, 255, 0.85);
+    --tag-purple-bg: #3c2d49; --tag-purple-fg: rgba(255, 255, 255, 0.85);
+    --tag-pink-bg: #4e2c3c;   --tag-pink-fg: rgba(255, 255, 255, 0.85);
+    --tag-red-bg: #522e2a;    --tag-red-fg: rgba(255, 255, 255, 0.85);
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-sidebar: var(--sidebar);
+  --color-hover: var(--hover);
+  --color-active: var(--active);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --color-popover: var(--popover);
+  --shadow-pop: var(--shadow);
+  --font-sans: "Heebo Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@layer base {
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+::selection {
+  background: rgba(35, 131, 226, 0.28);
+}
+
+/* Native date/time inputs: keep them quiet and theme-aware. */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"] {
+  background: transparent;
+  border: 0;
+  outline: none;
+  min-height: 1.75rem;
+}
+}
+
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
