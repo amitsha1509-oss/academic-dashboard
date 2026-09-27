@@ -31,11 +31,12 @@ export function TimelinePage() {
 
   // Milestones: important one-off dated items (exams, deadlines) in the window.
   const importance = properties.find((p) => p.id === "importance");
+  // Milestones are important *events* (exams, interviews), not every deadline.
   const milestones = items.filter((i) => {
-    const d = (i.when_at ?? i.due_at)?.slice(0, 10);
+    const d = i.when_at?.slice(0, 10);
     const important = importance ? i.props.importance === "high" : false;
     return d && !i.repeat && i.status !== "dropped" && d >= start && d <= end && (important || i.type_id === "exam");
-  });
+  }).sort((a, b) => a.when_at!.localeCompare(b.when_at!));
 
   const typeOf = (i: Item) => types.find((x) => x.id === i.type_id);
 
@@ -63,21 +64,19 @@ export function TimelinePage() {
             {today >= start && today <= end && (
               <div className="pointer-events-none absolute inset-y-0 z-10 w-px bg-danger" style={{ insetInlineStart: `${pos(today)}%` }} />
             )}
-            {milestones.length > 0 && (
-              <div className="relative mb-3 h-8">
-                {milestones.map((m) => {
-                  const d = (m.when_at ?? m.due_at)!.slice(0, 10);
-                  return (
-                    <button key={m.id} type="button" onClick={() => openItem(m.id)} title={`${m.title} · ${formatWhen(d)}`}
-                      className="absolute top-0 flex flex-col items-center text-danger hover:scale-110"
-                      style={{ insetInlineStart: `${pos(d)}%`, transform: "translateX(50%)" }}>
-                      <Diamond size={14} fill="currentColor" />
-                      <span className="max-w-24 truncate text-[11px] text-ink">{m.title}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+            {milestones.map((m) => {
+              const d = m.when_at!.slice(0, 10);
+              return (
+                <div key={m.id} className="relative mb-1 h-7">
+                  <button type="button" onClick={() => openItem(m.id)} title={formatWhen(d)}
+                    className="absolute inset-y-0 flex items-center gap-1.5 rounded-md px-1 text-sm whitespace-nowrap hover:bg-hover"
+                    style={{ insetInlineStart: `calc(${pos(d)}% - 0.6rem)` }}>
+                    <Diamond size={13} fill="currentColor" className="shrink-0 text-danger" />
+                    {m.title} <span className="text-xs text-faint">{formatWhen(d)}</span>
+                  </button>
+                </div>
+              );
+            })}
             {spans.map((s) => {
               const a = pos(s.span_start! < start ? start : s.span_start!);
               const b = pos((s.span_end ?? s.span_start!) > end ? end : addDays(s.span_end ?? s.span_start!, 1));
