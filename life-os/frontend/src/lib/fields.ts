@@ -106,7 +106,7 @@ export function buildFields(ctx: FieldContext): Field[] {
       ops: SET_OPS,
     },
     {
-      key: "parent", label: "חלק מ", kind: "parent", core: true,
+      key: "parent", label: "בתוך", kind: "parent", core: true,
       get: (i) => (i.parent_id && ctx.itemsById.has(i.parent_id) ? i.parent_id : null),
       buckets: (i) => {
         const p = i.parent_id ? ctx.itemsById.get(i.parent_id) : undefined;

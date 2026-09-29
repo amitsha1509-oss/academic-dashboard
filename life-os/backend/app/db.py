@@ -11,6 +11,34 @@ from pathlib import Path
 DATA_DIR = Path(os.environ.get("LIFEOS_DATA_DIR", Path(__file__).resolve().parents[2] / "data"))
 DB_PATH = DATA_DIR / "lifeos.sqlite3"
 
+# Starter item types: (id, name, icon, color, suggested fields). Colors are names from the UI palette.
+STARTER_TYPES = [
+    ("task", "משימה", "", "blue", ["due", "importance", "urgency", "effort", "parent"]),
+    ("topic", "נושא", "", "purple", ["links"]),
+    ("project", "פרויקט", "", "teal", ["span", "due", "parent"]),
+    ("course", "קורס", "", "green", ["span", "links", "parent"]),
+    ("lecture", "הרצאה", "", "orange", ["repeat", "parent"]),
+    ("exam", "מבחן", "", "red", ["when", "parent", "importance"]),
+    ("event", "אירוע", "", "yellow", ["when"]),
+    ("idea", "רעיון", "", "pink", ["parent", "tags"]),
+    ("note", "פתק", "", "gray", ["parent"]),
+    ("person", "אדם", "", "brown", ["links"]),
+    ("workout", "אימון", "", "teal", ["repeat", "parent"]),
+    ("link", "קישור", "", "gray", ["links", "parent"]),
+]
+
+
+def _v2_calm_redesign(conn: sqlite3.Connection) -> None:
+    """Redesign: no emoji icons, topic/project/note types, and built-in screens replace some views."""
+    conn.execute("UPDATE types SET icon = ''")
+    conn.execute("UPDATE views SET icon = ''")
+    for i, (tid, name, icon, color, suggested) in enumerate(STARTER_TYPES):
+        conn.execute("INSERT OR IGNORE INTO types (id, name, icon, color, suggested, sort) VALUES (?,?,?,?,?,?)",
+                     (tid, name, icon, color, json.dumps(suggested), 100 + i))
+    # The importance x urgency matrix and the by-type board are now built-in screens.
+    conn.execute("DELETE FROM views WHERE id IN ('eisenhower', 'by-type')")
+
+
 # Each entry runs once, in order. Never edit an entry that has shipped: append a new one.
 MIGRATIONS = [
     """
@@ -69,6 +97,7 @@ MIGRATIONS = [
         sort    INTEGER NOT NULL DEFAULT 0
     );
     """,
+    _v2_calm_redesign,
 ]
 
 
@@ -85,8 +114,8 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
 def migrate(conn: sqlite3.Connection) -> None:
     version = conn.execute("PRAGMA user_version").fetchone()[0]
     fresh = version == 0
-    for i, sql in enumerate(MIGRATIONS[version:], start=version + 1):
-        conn.executescript(sql)
+    for i, step in enumerate(MIGRATIONS[version:], start=version + 1):
+        step(conn) if callable(step) else conn.executescript(step)
         conn.execute(f"PRAGMA user_version = {i}")
     if fresh:
         seed(conn)
@@ -111,42 +140,22 @@ def seed(conn: sqlite3.Connection) -> None:
         conn.execute("INSERT INTO property_defs (id, name, type, options, sort) VALUES (?,?,?,?,?)",
                      (pid, name, ptype, json.dumps(options, ensure_ascii=False), i))
 
-    types = [
-        ("task", "משימה", "✅", "blue", ["due", "importance", "urgency", "effort"]),
-        ("event", "אירוע", "📅", "orange", ["when"]),
-        ("course", "קורס", "📚", "green", ["span", "links"]),
-        ("lecture", "הרצאה", "🎓", "purple", ["when", "repeat", "parent"]),
-        ("exam", "מבחן", "📝", "red", ["when", "parent", "importance"]),
-        ("idea", "רעיון", "💡", "yellow", ["tags"]),
-        ("person", "אדם", "👤", "pink", ["links"]),
-        ("workout", "אימון", "🏋️", "teal", ["when", "repeat"]),
-        ("link", "קישור", "🔗", "gray", ["links", "parent"]),
-    ]
+    types = STARTER_TYPES
     for i, (tid, name, icon, color, suggested) in enumerate(types):
-        conn.execute("INSERT INTO types (id, name, icon, color, suggested, sort) VALUES (?,?,?,?,?,?)",
+        conn.execute("INSERT OR IGNORE INTO types (id, name, icon, color, suggested, sort) VALUES (?,?,?,?,?,?)",
                      (tid, name, icon, color, json.dumps(suggested), i))
 
+    # Today, Inbox, Missed, Tasks (importance x urgency), Topics, Studies and Timeline are built-in
+    # screens. Views are the user's own extra lists; these are examples to start from.
     views = [
-        ("eisenhower", "מטריצת אייזנהאואר", "🧭", {
-            "layout": "grid", "grid": {"x": "urgency", "y": "importance"},
-            # Things to do, not containers: skip repeating items and periods (courses, semesters).
-            "filters": [{"field": "status", "op": "is", "value": "open"},
-                        {"field": "repeat", "op": "empty"},
-                        {"field": "span", "op": "empty"}]}),
-        ("easy", "משימות קלות", "🌱", {
-            "layout": "list", "sort": {"field": "due", "dir": "asc"},
-            "filters": [{"field": "status", "op": "is", "value": "open"},
-                        {"field": "effort", "op": "is", "value": "easy"}]}),
-        ("by-type", "הכול לפי סוג", "🗂️", {
-            "layout": "board", "groupBy": "type",
-            "filters": [{"field": "status", "op": "is", "value": "open"}]}),
-        ("exams", "מבחנים", "📝", {
-            "layout": "list", "sort": {"field": "when", "dir": "asc"},
-            "filters": [{"field": "type", "op": "is", "value": "exam"}]}),
-        ("ideas", "רעיונות", "💡", {
-            "layout": "list", "groupBy": "tags",
-            "filters": [{"field": "type", "op": "is", "value": "idea"}]}),
+        ("easy", "משימות קלות", "", {
+            "sort": {"field": "due", "dir": "asc"},
+            "filters": [{"field": "type", "op": "is", "value": ["task"]},
+                        {"field": "effort", "op": "is", "value": ["easy"]}]}),
+        ("ideas", "כל הרעיונות", "", {
+            "groupBy": "parent",
+            "filters": [{"field": "type", "op": "is", "value": ["idea"]}]}),
     ]
     for i, (vid, name, icon, config) in enumerate(views):
-        conn.execute("INSERT INTO views (id, name, icon, config, sort) VALUES (?,?,?,?,?)",
+        conn.execute("INSERT OR IGNORE INTO views (id, name, icon, config, sort) VALUES (?,?,?,?,?)",
                      (vid, name, icon, json.dumps(config, ensure_ascii=False), i))

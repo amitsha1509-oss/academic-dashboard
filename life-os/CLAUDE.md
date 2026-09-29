@@ -7,5 +7,6 @@ Rules:
 - Before committing: `backend/.venv/bin/python -m pytest backend/tests` (or the Windows path), `cd frontend && npx tsc -p . --noEmit && npm test && npm run build`. Commit the rebuilt `frontend/dist`.
 - New behavior for properties goes through `frontend/src/lib/fields.ts`, not special cases in pages.
 - DB schema changes: append a migration in `backend/app/db.py`.
-- UI text is Hebrew. Use logical CSS (start/end), never left/right.
+- UI text is Hebrew. Use logical CSS (start/end), never left/right. Keep direction C: no emoji, no sideways scrolling, one blue accent.
+- Show Amit a design (screenshot or prototype) before building anything visual.
 - The user wants to see it work: run it and check in a browser before saying it's done.

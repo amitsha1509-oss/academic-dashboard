@@ -1,14 +1,15 @@
 import { Archive, Download, Plus, RotateCcw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { newOptionId } from "../components/FieldEditor";
-import { Button, COLORS, Empty, IconButton, MenuItem, PageHeader, Popover, Section, Tag, tagStyle } from "../components/ui";
+import { Button, COLORS, Empty, IconButton, MenuItem, Popover, Section, Tag, tagStyle } from "../components/ui";
+import { Screen } from "../components/kit";
 import { api } from "../lib/api";
 import { formatWhen } from "../lib/dates";
 import { useStore } from "../lib/store";
 import type { ChoiceOption, Item, PropertyDef, PropType } from "../lib/types";
-import { PROP_TYPE_LABELS } from "./ItemPage";
+import { PROP_TYPE_LABELS } from "./ItemScreen";
 
-const input = "min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 outline-none hover:border-line focus:border-accent";
+const input = "min-w-0 rounded-xl bg-transparent px-2 py-1.5 outline-none hover:bg-hover focus:bg-hover";
 
 function ColorPicker({ color, onPick }: { color: string; onPick: (c: string) => void }) {
   return (
@@ -68,16 +69,16 @@ function PropertiesTab() {
 
   return (
     <>
-      <p className="mb-4 text-sm text-muted">
+      <p className="text-[15px] leading-relaxed text-muted">
         מאפיינים הם השדות שאפשר לתת לכל פריט. שינוי כאן משפיע מיד על כל הפריטים והתצוגות — שינוי שם, הוספת אפשרויות, או אפילו שינוי סוג (הערכים יומרו).
         בנוסף יש מאפייני ליבה קבועים שהאפליקציה מבינה: סטטוס, סוג, חלק מ, מתי, תאריך יעד, תקופה, חזרה, דחייה וקישורים.
       </p>
       {live.map((p) => (
-        <div key={p.id} className="mb-3 rounded-lg border border-line p-2">
+        <div key={p.id} className="rounded-[18px] bg-surface p-3">
           <div className="flex flex-wrap items-center gap-2">
             <input defaultValue={p.name} className={`${input} flex-1 font-medium`}
               onBlur={(e) => e.target.value.trim() && e.target.value !== p.name && updateProperty(p.id, { name: e.target.value.trim() })} />
-            <select value={p.type} className="rounded-md border border-line bg-canvas px-2 py-1 text-sm"
+            <select value={p.type} className="rounded-xl bg-canvas px-2 py-1.5 text-sm"
               onChange={(e) => {
                 const t = e.target.value as PropType;
                 const n = usage(p.id);
@@ -92,10 +93,10 @@ function PropertiesTab() {
         </div>
       ))}
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-line p-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-[18px] border-2 border-dashed border-line p-3">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="מאפיין חדש, למשל ״מרצה״ או ״מיקום״"
           className={`${input} flex-1`} onKeyDown={(e) => e.key === "Enter" && name.trim() && (createProperty(name.trim(), type), setName(""))} />
-        <select value={type} onChange={(e) => setType(e.target.value as PropType)} className="rounded-md border border-line bg-canvas px-2 py-1 text-sm">
+        <select value={type} onChange={(e) => setType(e.target.value as PropType)} className="rounded-xl bg-canvas px-2 py-1.5 text-sm">
           {Object.entries(PROP_TYPE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
         <Button variant="primary" disabled={!name.trim()} onClick={() => { createProperty(name.trim(), type); setName(""); }}>הוסף</Button>
@@ -124,14 +125,12 @@ function TypesTab() {
 
   return (
     <>
-      <p className="mb-4 text-sm text-muted">
+      <p className="text-[15px] leading-relaxed text-muted">
         סוג הוא רק הצעה: אילו מאפיינים להציג כברירת מחדל. כל פריט יכול לקבל כל מאפיין, ואפשר לשנות סוג בכל רגע.
       </p>
       {live.map((t) => (
-        <div key={t.id} className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-line p-2">
-          <input defaultValue={t.icon} maxLength={4} aria-label="אייקון" className={`${input} w-11 text-center text-lg`}
-            onBlur={(e) => e.target.value !== t.icon && updateType(t.id, { icon: e.target.value })} />
-          <input defaultValue={t.name} className={`${input} w-32 font-medium`}
+        <div key={t.id} className="flex flex-wrap items-center gap-2 rounded-[18px] bg-surface p-3">
+                    <input defaultValue={t.name} className={`${input} w-32 font-medium`}
             onBlur={(e) => e.target.value.trim() && e.target.value !== t.name && updateType(t.id, { name: e.target.value.trim() })} />
           <ColorPicker color={t.color} onPick={(c) => updateType(t.id, { color: c })} />
           <Popover width={220} trigger={({ toggle }) => (
@@ -153,7 +152,7 @@ function TypesTab() {
           <IconButton label="הסתר סוג" onClick={() => setTypeArchived(t.id, true)}><Archive size={15} /></IconButton>
         </div>
       ))}
-      <div className="flex items-center gap-2 rounded-lg border border-dashed border-line p-2">
+      <div className="flex items-center gap-2 rounded-[18px] border-2 border-dashed border-line p-3">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="סוג חדש, למשל ״פרויקט״"
           className={`${input} flex-1`} onKeyDown={(e) => e.key === "Enter" && name.trim() && (createType(name.trim()), setName(""))} />
         <Button variant="primary" disabled={!name.trim()} onClick={() => { createType(name.trim()); setName(""); }}>הוסף</Button>
@@ -162,7 +161,7 @@ function TypesTab() {
         <Section title="מוסתרים">
           {archived.map((t) => (
             <div key={t.id} className="flex items-center gap-2 px-2 py-1">
-              <span className="flex-1 text-muted">{t.icon} {t.name}</span>
+              <span className="flex-1 text-muted">{t.name}</span>
               <Button onClick={() => setTypeArchived(t.id, false)}><RotateCcw size={14} /> שחזר</Button>
             </div>
           ))}
@@ -179,7 +178,7 @@ function DataTab() {
   return (
     <>
       <Section title="גיבוי">
-        <p className="mb-3 text-sm text-muted">
+        <p className="mb-3 text-[15px] text-muted">
           גיבוי אוטומטי נשמר כל יום בתיקייה <code dir="ltr">life-os/data/backups</code> (14 הימים האחרונים). אפשר גם להוריד עותק מלא:
         </p>
         <a href="/api/export" download="life-os-export.json">
@@ -205,20 +204,20 @@ const TABS = [
   { id: "data", label: "גיבוי וסל מחזור", C: DataTab },
 ] as const;
 
-export function SettingsPage({ tab }: { tab?: string }) {
-  const current = TABS.find((t) => t.id === tab) ?? TABS[0];
+export function SettingsScreen() {
+  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("properties");
+  const current = TABS.find((t) => t.id === tab)!;
   return (
-    <div className="mx-auto max-w-3xl">
-      <PageHeader icon="⚙️" title="הגדרות" />
-      <div className="mb-5 flex gap-1 border-b border-line">
+    <Screen title="הגדרות" subtitle="מאפיינים, סוגי פריטים, גיבוי וסל מחזור.">
+      <div className="flex flex-wrap gap-2">
         {TABS.map((t) => (
-          <a key={t.id} href={`#/settings/${t.id}`}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm ${t.id === current.id ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"}`}>
+          <button key={t.id} type="button" onClick={() => setTab(t.id)}
+            className={`rounded-full px-4 py-2 text-[14.5px] font-medium ${t.id === tab ? "bg-ink text-canvas" : "bg-surface hover:bg-active"}`}>
             {t.label}
-          </a>
+          </button>
         ))}
       </div>
-      <current.C />
-    </div>
+      <div className="grid gap-4"><current.C /></div>
+    </Screen>
   );
 }

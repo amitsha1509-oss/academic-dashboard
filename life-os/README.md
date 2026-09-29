@@ -18,21 +18,21 @@ Needs: Python 3.10+. Node.js is only needed to rebuild the frontend after code c
 - Settings → "גיבוי וסל מחזור": download everything as JSON, restore deleted items.
 
 ## How to use it
-| Screen | What it's for |
-|---|---|
-| **היום** (Today) | Today's schedule (including repeating lectures), overdue, due today, snoozed items that came back, the next 7 days |
-| **תיבת קליטה** (Inbox) | Everything typed into the capture bar. Give it a type or a parent, or just mark it sorted, whenever convenient |
-| **פספוסים ודחיות** (Missed) | Lectures/workouts not marked, overdue, things postponed repeatedly, stale inbox. Updates itself |
-| **השבוע** (Week) | Week grid |
-| **ציר זמן** (Timeline) | The big picture: anything with a "תקופה" (period), plus important dated items |
-| **תצוגות** (Views) | Saved filter + group + sort + layout (list / board / table / Eisenhower-style grid). Create as many as you want |
-| **הגדרות** (Settings) | Add, rename, recolor or change the type of properties and item types. Everything updates everywhere |
+Everything starts at the **main page (העמוד הראשי)**: a capture line, "the next thing", and a tile for each area.
+Tapping a tile slides its screen in from the left. **חזרה** (or the phone/browser back) slides it back.
+The full walkthrough is inside the app: "איך זה עובד? מדריך קצר" on the main page.
 
-Tips:
-- A course is an item. Lectures, homework and exams go **inside** it ("חלק מ" / "הוסף פריט בפנים"). Put the Drive folder link on the course.
-- A weekly lecture is **one** item with a repeat rule. Mark each occurrence "בוצע" or "דלג". Unmarked past ones show up in Missed.
-- Switching from semester to exams: set "עד" (until) on the lecture repeats, add a daily study-block repeat. Nothing else changes.
-- Ctrl+K opens search.
+| Tile | What it's for |
+|---|---|
+| **היום** (Today) | Today's schedule (including repeating lectures), overdue, due today, snoozed items that came back, the coming week |
+| **תיבת קליטה** (Inbox) | Everything typed in the capture line. Pick a type or where it belongs and it leaves the inbox |
+| **פספוסים** (Missed) | Lectures/workouts not marked, overdue, things postponed again and again. Updates itself |
+| **משימות** (Tasks) | Open tasks only, by importance and urgency |
+| **נושאים** (Topics) | Life areas (investments, intelligence, health…); each collects what's inside it |
+| **לימודים** (Studies) | Courses and upcoming exams |
+| **ציר זמן** (Timeline) | The big picture, month by month, top to bottom |
+| **התצוגות שלי** (My views) | Your own saved lists: filter, group, sort, list or matrix |
+| Search / Settings | Icons at the top of the main page. Settings: properties, types, backup, trash |
 
 ## Development
 ```

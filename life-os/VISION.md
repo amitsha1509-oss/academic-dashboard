@@ -64,7 +64,9 @@ One line typed on the phone → goes to Inbox. Sorting and properties come later
 ## Decided (2026-09-27)
 - UI language: **Hebrew, RTL**.
 - Runs **locally on my computer** for now; hosting comes later.
-- Visual style: **Notion / Obsidian**: clean, calm, professional, easy to use.
+- Visual style: direction C, "bright and bold" (chosen from three mockups). Big black headings, one strong blue, no emoji.
+- Navigation: a main page with tiles; screens slide right-to-left; everything flows top to bottom.
+- Topics (נושא) are first-class, e.g. investments, intelligence.
 - Name for now: **המרכז** ("the center"). Easy to rename.
 
 ## Still open

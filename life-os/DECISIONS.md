@@ -12,3 +12,8 @@ Newest at the bottom. One line of why for each.
 - **2026-09-27 · Deletes are soft (archive).** Undo everywhere; values survive hiding a property.
 - **2026-09-27 · Local only for now, bound to 127.0.0.1, no login.** Single user on own computer. Hosting and auth come together later.
 - **2026-09-27 · Hebrew RTL, Notion-like style, Heebo font bundled.** Works offline, no external requests.
+- **2026-09-29 · Main page with tiles + sliding screens, no sidebar.** Asked for directly: one place to start, screens that slide right-to-left, everything flowing top to bottom.
+- **2026-09-29 · Visual direction C ("bright and bold").** Chosen from three mockups: big black Heebo headings, one strong blue for "the next thing", gray tiles, no emoji, no decoration.
+- **2026-09-29 · Built-in screens for Tasks, Topics, Studies and Timeline; views are the user's extras.** Each screen shows only the item types it's for (the tasks matrix never shows courses or lectures).
+- **2026-09-29 · Board and table layouts removed.** They scrolled sideways; lists and a vertical matrix cover the same needs.
+- **2026-09-29 · Design is agreed on a clickable prototype before building.** The first version was built before any design was shown, and looked generic.

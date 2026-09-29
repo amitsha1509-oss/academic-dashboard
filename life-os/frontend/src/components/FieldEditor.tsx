@@ -210,10 +210,10 @@ export function ParentPicker({ item, onPick, compact }: { item: Item; onPick: (i
     .slice(0, 30);
   return (
     <Popover width={280} trigger={({ toggle }) => (
-      <button type="button" onClick={toggle} className={compact ? "rounded-md px-1.5 py-0.5 text-sm hover:bg-hover" : valueBox}>
+      <button type="button" onClick={toggle} className={compact ? "max-w-48 truncate rounded-full bg-surface px-3 py-1 text-[13.5px] font-medium hover:bg-active" : valueBox}>
         {parent ? (
           <span className="truncate">{typeOf(parent)?.icon} {parent.title}</span>
-        ) : compact ? <span className="text-faint">חלק מ…</span> : placeholder}
+        ) : compact ? <span>בתוך…</span> : placeholder}
       </button>
     )}>
       {(close) => (
@@ -310,7 +310,7 @@ function SpanEditor({ item }: { item: Item }) {
   );
 }
 
-export function describeRepeat(r: Repeat): string {
+export function describeRepeat(r: Repeat, short = false): string {
   const every = r.interval > 1 ? `כל ${r.interval} ` : "כל ";
   let s: string;
   if (r.freq === "daily") s = r.interval > 1 ? `${every}ימים` : "כל יום";
@@ -320,7 +320,7 @@ export function describeRepeat(r: Repeat): string {
     s = `${r.interval > 1 ? `${every}שבועות` : "כל שבוע"}${days ? ` · ${days}` : ""}`;
   }
   if (r.time) s += ` · ${r.time}${r.end_time ? `–${r.end_time}` : ""}`;
-  if (r.until) s += ` · עד ${formatWhen(r.until)}`;
+  if (r.until && !short) s += ` · עד ${formatWhen(r.until)}`;
   return s;
 }
 

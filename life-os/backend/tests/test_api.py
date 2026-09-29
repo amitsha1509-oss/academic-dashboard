@@ -7,8 +7,8 @@ def make(client, **body):
 def test_seed_is_present(client):
     data = client.get("/api/bootstrap").json()
     assert {"importance", "urgency", "effort"} <= {p["id"] for p in data["properties"]}
-    assert "course" in {t["id"] for t in data["types"]}
-    assert any(v["config"].get("layout") == "grid" for v in data["views"])
+    assert {"course", "topic", "project", "note"} <= {t["id"] for t in data["types"]}
+    assert all(t["icon"] == "" for t in data["types"])
 
 
 def test_quick_capture_goes_to_inbox_and_leaves_when_sorted(client):
@@ -98,3 +98,18 @@ def test_delete_and_restore_keeps_children(client):
     client.post(f"/api/items/{parent['id']}/restore")
     ids = {i["id"] for i in client.get("/api/bootstrap").json()["items"]}
     assert parent["id"] in ids
+
+
+def test_v2_migration_upgrades_an_old_database(tmp_path):
+    import sqlite3
+    from app import db
+    conn = sqlite3.connect(tmp_path / "old.sqlite3")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(db.MIGRATIONS[0])
+    conn.execute("PRAGMA user_version = 1")
+    conn.execute("INSERT INTO types (id, name, icon) VALUES ('task', 'משימה', '✅')")
+    conn.execute("INSERT INTO views (id, name, config) VALUES ('eisenhower', 'x', '{}'), ('mine', 'y', '{}')")
+    db.migrate(conn)
+    types = {r["id"]: r["icon"] for r in conn.execute("SELECT id, icon FROM types")}
+    assert types["task"] == "" and "topic" in types
+    assert [r["id"] for r in conn.execute("SELECT id FROM views")] == ["mine"]
