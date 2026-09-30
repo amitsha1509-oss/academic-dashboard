@@ -1,4 +1,6 @@
 import { Toasts } from "./components/ui";
+import { Onboarding } from "./components/AreaPicker";
+import { useAreas } from "./lib/areas";
 import { NavProvider, useRoute } from "./lib/nav";
 import { StoreProvider, useStore } from "./lib/store";
 import { SearchScreen, GuideScreen, StudiesScreen, TimelineScreen, TopicsScreen, ViewsScreen } from "./screens/Browse";
@@ -31,6 +33,7 @@ function CurrentScreen() {
 
 function Shell() {
   const { loaded, error, reload } = useStore();
+  const { needsSetup } = useAreas();
   if (!loaded) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
@@ -44,6 +47,7 @@ function Shell() {
       </div>
     );
   }
+  if (needsSetup) return <><Onboarding /><Toasts /></>;
   return (
     <>
       <NavProvider><CurrentScreen /></NavProvider>

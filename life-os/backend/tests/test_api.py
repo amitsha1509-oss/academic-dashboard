@@ -113,3 +113,9 @@ def test_v2_migration_upgrades_an_old_database(tmp_path):
     types = {r["id"]: r["icon"] for r in conn.execute("SELECT id, icon FROM types")}
     assert types["task"] == "" and "topic" in types
     assert [r["id"] for r in conn.execute("SELECT id FROM views")] == ["mine"]
+
+
+def test_settings_roundtrip(client):
+    assert client.put("/api/settings/areas", json={"value": ["tasks", "studies"]}).status_code == 200
+    assert client.get("/api/bootstrap").json()["settings"]["areas"] == ["tasks", "studies"]
+    assert client.put("/api/settings/whatever", json={"value": 1}).status_code == 400

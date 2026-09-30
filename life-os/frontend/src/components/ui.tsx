@@ -186,7 +186,7 @@ export function Section({ title, count, children, action, tone, sub }: {
     <section className="grid gap-1">
       <div className="flex items-baseline gap-2 pb-1">
         <h2 className={`display text-[20px] ${tone === "danger" ? "text-danger" : ""}`}>{title}</h2>
-        {count !== undefined && <span className="text-sm font-medium text-faint">{count}</span>}
+        {!!count && <span className="text-sm font-medium text-faint">{count}</span>}
         {sub && <span className="text-sm text-muted">{sub}</span>}
         <div className="flex-1" />
         {action}
@@ -203,7 +203,7 @@ export function Empty({ children }: { children: ReactNode }) {
 export function Toasts() {
   const { toasts, dismissToast } = useStore();
   return (
-    <div className="pb-safe pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex flex-col items-center gap-2 px-4">
+    <div className="pb-safe pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex flex-col items-center gap-2 px-4">
       {toasts.map((t) => (
         <div key={t.id} className="pointer-events-auto flex items-center gap-3 rounded-full bg-ink px-5 py-3 text-[15px] font-medium text-canvas shadow-pop">
           <span>{t.message}</span>

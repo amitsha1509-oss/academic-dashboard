@@ -18,7 +18,9 @@ Needs: Python 3.10+. Node.js is only needed to rebuild the frontend after code c
 - Settings → "גיבוי וסל מחזור": download everything as JSON, restore deleted items.
 
 ## How to use it
-Everything starts at the **main page (העמוד הראשי)**: a capture line, "the next thing", and a tile for each area.
+On first launch the app asks which areas you want (tasks, studies, topics…); only those appear. Change it any time in Settings → "מה מופיע אצלי".
+
+Everything starts at the **main page (העמוד הראשי)**: an add line (write naturally: "להתקשר לבנק מחר #השקעות !"), "the next thing", and a tile for each chosen area.
 Tapping a tile slides its screen in from the left. **חזרה** (or the phone/browser back) slides it back.
 The full walkthrough is inside the app: "איך זה עובד? מדריך קצר" on the main page.
 
@@ -31,8 +33,8 @@ The full walkthrough is inside the app: "איך זה עובד? מדריך קצר
 | **נושאים** (Topics) | Life areas (investments, intelligence, health…); each collects what's inside it |
 | **לימודים** (Studies) | Courses and upcoming exams |
 | **ציר זמן** (Timeline) | The big picture, month by month, top to bottom |
-| **התצוגות שלי** (My views) | Your own saved lists: filter, group, sort, list or matrix |
-| Search / Settings | Icons at the top of the main page. Settings: properties, types, backup, trash |
+| **רשימות משלי** (My lists) | Optional. Lists you build by answering a few questions |
+| Search / Settings | Icons at the top of the main page. Settings: what appears, backup and trash, advanced (types and properties) |
 
 ## Development
 ```

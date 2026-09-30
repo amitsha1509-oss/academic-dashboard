@@ -1,7 +1,8 @@
 // Screens the app maintains by itself: Today, Inbox, Missed, and the Tasks matrix.
 import { useState } from "react";
 import { ParentPicker } from "../components/FieldEditor";
-import { Chip, EmptyNote, Row, Screen } from "../components/kit";
+import { Chip, EmptyNote, EmptyState, Row, Screen } from "../components/kit";
+import { AddSheet } from "../components/AddPanel";
 import { MenuItem, Popover, Section, StatusCheck } from "../components/ui";
 import { addDays, formatLongDate, formatWhen, todayISO } from "../lib/dates";
 import { useServerData, useStore } from "../lib/store";
@@ -42,35 +43,53 @@ export function TodayScreen() {
   const { itemsById } = useStore();
   const today = todayISO();
   const t = useServerData<TodayData>(`/smart/today?day=${today}`);
+  const [adding, setAdding] = useState(false);
   if (!t) return <Screen title="היום" add={{ type_id: "task", when: "today" }}>{null}</Screen>;
   const overdue = pick(t.overdue, itemsById);
   const returned = pick(t.returned, itemsById);
+  const nothing = !t.schedule.length && !overdue.length && !t.due_today.length && !returned.length && !t.upcoming.length;
+  if (nothing) {
+    return (
+      <Screen title="היום" subtitle={formatLongDate(today)} add={{ type_id: "task", when: "today" }}>
+        <EmptyState title="היום פנוי" action={{ label: "להוסיף משהו להיום", onClick: () => setAdding(true) }}
+          text="כאן מופיע כל מה שקשור להיום: הרצאות ואימונים שחוזרים, משימות שצריך לסיים, ומה שבאיחור. זה מתמלא לבד מדברים שיש להם תאריך." />
+        <AddSheet open={adding} onClose={() => setAdding(false)} defaults={{ type_id: "task", when: "today" }} />
+      </Screen>
+    );
+  }
   return (
     <Screen title="היום" subtitle={formatLongDate(today)} add={{ type_id: "task", when: "today" }}>
-      <Section title="לוח זמנים" count={t.schedule.length}>
-        {t.schedule.length ? t.schedule.map((e) => <ScheduleRow key={`${e.item_id}-${e.date}`} entry={e} />)
-          : <EmptyNote>שום דבר לא מתוזמן להיום.</EmptyNote>}
-      </Section>
+      {!t.schedule.length && !overdue.length && !t.due_today.length && (
+        <EmptyNote>להיום אין כלום מתוזמן. הנה מה שמגיע בהמשך.</EmptyNote>
+      )}
+      {t.schedule.length > 0 && (
+        <Section title="לוח זמנים" count={t.schedule.length}>
+          {t.schedule.map((e) => <ScheduleRow key={`${e.item_id}-${e.date}`} entry={e} />)}
+        </Section>
+      )}
       {overdue.length > 0 && (
         <Section title="באיחור" tone="danger" count={overdue.length}>
           {overdue.map((i) => <Row key={i.id} item={i} actions={<PostponeChip item={i} />} />)}
         </Section>
       )}
-      <Section title="להיום" count={t.due_today.length}>
-        {t.due_today.length ? pick(t.due_today, itemsById).map((i) => <Row key={i.id} item={i} />)
-          : <EmptyNote>אין משימות שצריך לסיים היום.</EmptyNote>}
-      </Section>
+      {t.due_today.length > 0 && (
+        <Section title="להיום" count={t.due_today.length}>
+          {pick(t.due_today, itemsById).map((i) => <Row key={i.id} item={i} />)}
+        </Section>
+      )}
       {returned.length > 0 && (
         <Section title="חזרו מדחייה" count={returned.length}>
           {returned.map((i) => <Row key={i.id} item={i} />)}
         </Section>
       )}
-      <Section title="השבוע הקרוב" count={t.upcoming.length}>
-        {t.upcoming.length ? t.upcoming.map((u) => {
-          const i = itemsById.get(u.item_id);
-          return i ? <Row key={i.id} item={i} /> : null;
-        }) : <EmptyNote>שבוע פנוי.</EmptyNote>}
-      </Section>
+      {t.upcoming.length > 0 && (
+        <Section title="השבוע הקרוב" count={t.upcoming.length}>
+          {t.upcoming.map((u) => {
+            const i = itemsById.get(u.item_id);
+            return i ? <Row key={i.id} item={i} /> : null;
+          })}
+        </Section>
+      )}
     </Screen>
   );
 }
@@ -195,6 +214,7 @@ function ClassifyChip({ item }: { item: Item }) {
 
 export function TasksScreen() {
   const { items, properties } = useStore();
+  const [adding, setAdding] = useState(false);
   const tasks = items
     .filter((i) => i.type_id === "task" && i.status === "open" && !i.repeat)
     .sort((a, b) => (a.due_at ?? "9999").localeCompare(b.due_at ?? "9999"));
@@ -209,6 +229,15 @@ export function TasksScreen() {
     );
   }
   const unsorted = tasks.filter((i) => !i.props.importance || !i.props.urgency);
+  if (!tasks.length) {
+    return (
+      <Screen title="משימות" add={{ type_id: "task" }}>
+        <EmptyState title="אין משימות פתוחות" action={{ label: "להוסיף משימה", onClick: () => setAdding(true) }}
+          text="כאן רואים את המשימות שלך מחולקות לארבע: מה לעשות עכשיו, מה לתכנן, מה לקצר ומה אפשר לוותר. מסמנים לכל משימה אם היא חשובה ואם היא דחופה." />
+        <AddSheet open={adding} onClose={() => setAdding(false)} defaults={{ type_id: "task" }} />
+      </Screen>
+    );
+  }
   return (
     <Screen title="משימות" subtitle="רק משימות פתוחות, לפי חשיבות ודחיפות. קורסים, נושאים והרצאות לא מופיעים כאן." add={{ type_id: "task" }}>
       {QUADRANTS.map((q) => {

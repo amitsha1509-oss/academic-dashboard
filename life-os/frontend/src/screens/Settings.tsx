@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { newOptionId } from "../components/FieldEditor";
 import { Button, COLORS, Empty, IconButton, MenuItem, Popover, Section, Tag, tagStyle } from "../components/ui";
 import { Screen } from "../components/kit";
+import { AreaPicker } from "../components/AreaPicker";
+import { useAreas } from "../lib/areas";
 import { api } from "../lib/api";
 import { formatWhen } from "../lib/dates";
 import { useStore } from "../lib/store";
@@ -66,26 +68,34 @@ function PropertiesTab() {
   const live = properties.filter((p) => !p.archived);
   const archived = properties.filter((p) => p.archived);
   const usage = (id: string) => items.filter((i) => i.props[id] !== undefined).length;
+  const [changingType, setChangingType] = useState<string | null>(null);
 
   return (
     <>
       <p className="text-[15px] leading-relaxed text-muted">
-        מאפיינים הם השדות שאפשר לתת לכל פריט. שינוי כאן משפיע מיד על כל הפריטים והתצוגות — שינוי שם, הוספת אפשרויות, או אפילו שינוי סוג (הערכים יומרו).
-        בנוסף יש מאפייני ליבה קבועים שהאפליקציה מבינה: סטטוס, סוג, חלק מ, מתי, תאריך יעד, תקופה, חזרה, דחייה וקישורים.
+        מאפיין הוא פרט שאפשר לתת לפריט, כמו חשיבות, מאמץ או מרצה. כאן משנים שם, מוסיפים אפשרויות או מסתירים מאפיין.
+        תאריכים, "בתוך", חזרה וקישורים מובנים באפליקציה ולכן לא מופיעים כאן.
       </p>
       {live.map((p) => (
         <div key={p.id} className="rounded-[18px] bg-surface p-3">
           <div className="flex flex-wrap items-center gap-2">
             <input defaultValue={p.name} className={`${input} flex-1 font-medium`}
               onBlur={(e) => e.target.value.trim() && e.target.value !== p.name && updateProperty(p.id, { name: e.target.value.trim() })} />
-            <select value={p.type} className="rounded-xl bg-canvas px-2 py-1.5 text-sm"
-              onChange={(e) => {
-                const t = e.target.value as PropType;
-                const n = usage(p.id);
-                if (!n || confirm(`לשנות את הסוג ל„${PROP_TYPE_LABELS[t]}”? ${n} פריטים יומרו; ערכים שלא ניתן להמיר יוסרו.`)) convertProperty(p.id, t);
-              }}>
-              {Object.entries(PROP_TYPE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
+            {changingType === p.id ? (
+              <select value={p.type} autoFocus className="rounded-xl bg-canvas px-2 py-1.5 text-sm" aria-label="סוג המאפיין"
+                onBlur={() => setChangingType(null)}
+                onChange={(e) => {
+                  const t = e.target.value as PropType;
+                  const n = usage(p.id);
+                  if (!n || confirm(`לשנות את הסוג ל„${PROP_TYPE_LABELS[t]}”? ${n} פריטים יומרו, וערכים שלא ניתן להמיר יוסרו.`)) convertProperty(p.id, t);
+                  setChangingType(null);
+                }}>
+                {Object.entries(PROP_TYPE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+            ) : (
+              <button type="button" onClick={() => setChangingType(p.id)} title="שינוי סוג"
+                className="rounded-full px-2.5 py-1 text-[13px] text-muted hover:bg-canvas hover:text-ink">{PROP_TYPE_LABELS[p.type]}</button>
+            )}
             <span className="text-xs text-faint">{usage(p.id)} פריטים</span>
             <IconButton label="הסתר מאפיין" onClick={() => setPropertyArchived(p.id, true)}><Archive size={15} /></IconButton>
           </div>
@@ -126,7 +136,7 @@ function TypesTab() {
   return (
     <>
       <p className="text-[15px] leading-relaxed text-muted">
-        סוג הוא רק הצעה: אילו מאפיינים להציג כברירת מחדל. כל פריט יכול לקבל כל מאפיין, ואפשר לשנות סוג בכל רגע.
+        הסוג קובע אילו פרטים יוצעו לפריט. הם לא חובה, ואפשר לשנות לפריט את הסוג בכל רגע. סוגים שכיבית ב"מה מופיע אצלי" מופיעים כאן כמוסתרים.
       </p>
       {live.map((t) => (
         <div key={t.id} className="flex flex-wrap items-center gap-2 rounded-[18px] bg-surface p-3">
@@ -198,17 +208,50 @@ function DataTab() {
   );
 }
 
+function AreasTab() {
+  const { enabled, setAreas } = useAreas();
+  const { toast } = useStore();
+  const [selected, setSelected] = useState<string[]>([...enabled]);
+  const changed = selected.length !== enabled.size || selected.some((a) => !enabled.has(a));
+  return (
+    <>
+      <p className="text-[15px] leading-relaxed text-muted">
+        מה שתבחר יופיע בעמוד הראשי ובאפשרויות ההוספה. מה שתכבה פשוט מוסתר: הפריטים שלו נשמרים וחוזרים כשמדליקים שוב.
+      </p>
+      <AreaPicker selected={selected} onChange={setSelected} />
+      {changed && (
+        <button type="button" onClick={async () => { await setAreas(selected); toast("נשמר"); }}
+          className="pb-safe sticky bottom-4 justify-self-start rounded-full bg-ink px-6 py-3 text-[16px] font-medium text-canvas shadow-pop">
+          שמור שינויים
+        </button>
+      )}
+    </>
+  );
+}
+
+function AdvancedTab() {
+  return (
+    <>
+      <p className="text-[15px] leading-relaxed text-muted">
+        כאן משנים את אבני הבניין: אילו סוגי פריטים יש, ואילו פרטים אפשר לתת להם. רוב האנשים לא צריכים לגעת בזה.
+      </p>
+      <Section title="סוגי פריטים"><div className="grid gap-2"><TypesTab /></div></Section>
+      <Section title="מאפיינים"><div className="grid gap-3"><PropertiesTab /></div></Section>
+    </>
+  );
+}
+
 const TABS = [
-  { id: "properties", label: "מאפיינים", C: PropertiesTab },
-  { id: "types", label: "סוגים", C: TypesTab },
+  { id: "areas", label: "מה מופיע אצלי", C: AreasTab },
   { id: "data", label: "גיבוי וסל מחזור", C: DataTab },
+  { id: "advanced", label: "מתקדם", C: AdvancedTab },
 ] as const;
 
 export function SettingsScreen() {
-  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("properties");
+  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("areas");
   const current = TABS.find((t) => t.id === tab)!;
   return (
-    <Screen title="הגדרות" add={false} subtitle="מאפיינים, סוגי פריטים, גיבוי וסל מחזור.">
+    <Screen title="הגדרות" add={false}>
       <div className="flex flex-wrap gap-2">
         {TABS.map((t) => (
           <button key={t.id} type="button" onClick={() => setTab(t.id)}

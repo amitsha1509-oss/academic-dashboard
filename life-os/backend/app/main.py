@@ -141,12 +141,26 @@ async def bootstrap():
         "properties": [row_to_json(r, "options") for r in conn.execute("SELECT * FROM property_defs ORDER BY sort, name")],
         "types": [row_to_json(r, "suggested") for r in conn.execute("SELECT * FROM types ORDER BY sort, name")],
         "views": [row_to_json(r, "config") for r in conn.execute("SELECT * FROM views ORDER BY sort, name")],
+        "settings": {r["key"]: json.loads(r["value"]) for r in conn.execute("SELECT * FROM settings")},
     }
+
+
+SETTING_KEYS = {"areas"}
+
+
+@app.put("/api/settings/{key}")
+async def put_setting(key: str, body: models.SettingValue):
+    if key not in SETTING_KEYS:
+        raise HTTPException(400, "unknown setting")
+    conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                 (key, json.dumps(body.value, ensure_ascii=False)))
+    conn.commit()
+    return {key: body.value}
 
 
 @app.get("/api/export")
 async def export():
-    tables = ("items", "property_defs", "types", "views", "occurrences")
+    tables = ("items", "property_defs", "types", "views", "occurrences", "settings")
     return {t: [dict(r) for r in conn.execute(f"SELECT * FROM {t}")] for t in tables}
 
 

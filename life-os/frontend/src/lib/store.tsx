@@ -16,6 +16,7 @@ interface Bootstrap {
   properties: PropertyDef[];
   types: ItemType[];
   views: View[];
+  settings: Record<string, unknown>;
 }
 
 function mergePatch(item: Item, patch: ItemPatch): Item {
@@ -211,12 +212,12 @@ function useStoreValue() {
     }
   }, [fail]);
 
-  const setTypeArchived = useCallback(async (id: string, archived: boolean) => {
+  const setTypeArchived = useCallback(async (id: string, archived: boolean, opts: { quiet?: boolean } = {}) => {
     try {
       if (archived) await api.del(`/types/${id}`);
       else await api.post(`/types/${id}/restore`);
       setList("types", (l) => l.map((t) => (t.id === id ? { ...t, archived } : t)));
-      if (archived) toast("הסוג הוסתר", { label: "ביטול", run: () => setTypeArchived(id, false) });
+      if (archived && !opts.quiet) toast("הסוג הוסתר", { label: "ביטול", run: () => setTypeArchived(id, false) });
     } catch (e) {
       fail(e);
     }
@@ -252,6 +253,16 @@ function useStoreValue() {
     }
   }, [fail]);
 
+  const setSetting = useCallback(async (key: string, value: unknown) => {
+    setData((d) => (d ? { ...d, settings: { ...d.settings, [key]: value } } : d));
+    try {
+      await api.put(`/settings/${key}`, { value });
+    } catch (e) {
+      fail(e);
+      reload();
+    }
+  }, [fail, reload]);
+
   const items = useMemo(() => data?.items ?? [], [data]);
   const itemsById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const childrenOf = useMemo(() => {
@@ -274,6 +285,8 @@ function useStoreValue() {
     properties: data?.properties ?? [],
     types: data?.types ?? [],
     views: data?.views ?? [],
+    settings: data?.settings ?? {},
+    setSetting,
     fields,
     toasts,
     toast,

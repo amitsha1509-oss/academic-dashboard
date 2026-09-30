@@ -22,3 +22,8 @@ Newest at the bottom. One line of why for each.
 - **2026-09-30 · "פרט לפריט הזה" vs "פריט חדש בתוך X".** Two named buttons instead of one ambiguous "add". "להציג תמיד" pins a property on every item of that type.
 - **2026-09-30 · Views are built by answering plain questions**, and each view shows a one-sentence description of what it contains. Filter chips were removed from the view screen.
 - **2026-09-30 · Property names are gray text, values sit in white boxes, empty values say "בחר…" in blue.** Names and empty values looked the same.
+- **2026-10-01 · Goal: simple to use, obvious what's relevant, flexibility under control.** Researched Notion/Capacities onboarding, Things 3, Todoist quick add and empty-state guidance.
+- **2026-10-01 · First launch asks one question: which areas to use (`lib/areas.ts`).** Only chosen areas show tiles and item types; turning one off hides it without deleting. Changeable in Settings → "מה מופיע אצלי". Existing data keeps everything on.
+- **2026-10-01 · Plain-language quick add (`lib/quickParse.ts`).** "מחר", "ביום שלישי", "15.10", "#נושא" and "!" are understood; the panel says what it understood and tapping a chip overrides it.
+- **2026-10-01 · Settings order: what appears → backup → advanced.** Types and properties live under "מתקדם"; changing a property's type is one more tap away.
+- **2026-10-01 · Empty screens explain themselves once, with one button; zero counts and empty sections are hidden.**

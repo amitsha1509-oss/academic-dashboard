@@ -124,3 +124,18 @@ export function Chip({ children, onClick, primary, active }: { children: ReactNo
 export function EmptyNote({ children }: { children: ReactNode }) {
   return <div className="border-b border-line py-3 text-[15px] text-faint">{children}</div>;
 }
+
+/** A whole screen with nothing in it yet: what it's for, and the one thing to do. */
+export function EmptyState({ title, text, action }: { title: string; text: ReactNode; action?: { label: string; onClick: () => void } }) {
+  return (
+    <div className="grid justify-items-start gap-2 rounded-[22px] bg-surface p-6">
+      <h2 className="display text-[22px]">{title}</h2>
+      <p className="max-w-[46ch] text-[15.5px] leading-relaxed text-muted">{text}</p>
+      {action && (
+        <button type="button" onClick={action.onClick} className="mt-2 rounded-full bg-ink px-5 py-2.5 text-[15px] font-medium text-canvas">
+          {action.label}
+        </button>
+      )}
+    </div>
+  );
+}

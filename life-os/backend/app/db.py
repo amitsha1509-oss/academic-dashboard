@@ -98,6 +98,13 @@ MIGRATIONS = [
     );
     """,
     _v2_calm_redesign,
+    # Small per-user preferences, e.g. which areas appear on the main page.
+    """
+    CREATE TABLE settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
+    """,
 ]
 
 

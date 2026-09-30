@@ -17,6 +17,7 @@ One process on 127.0.0.1:8765 serves both the API and the built frontend (`front
 | `types` | Item types (task, course, lecture…): name, icon, color, suggested fields. Suggestions only, never enforced |
 | `occurrences` | Per-date marks (done/skipped) for repeating items. Unmarked = open |
 | `views` | Saved view configs (JSON: filters, groupBy, sort, layout, grid axes, columns) |
+| `settings` | Small preferences as JSON (currently `areas`) |
 
 Schema/data changes: append to `MIGRATIONS` in `db.py` (an SQL string or a Python function; never edit a shipped entry). `PRAGMA user_version` tracks what ran. Migration 2 removed emoji icons, added topic/project/note types, and dropped views that became built-in screens.
 
@@ -35,6 +36,8 @@ Schema/data changes: append to `MIGRATIONS` in `db.py` (an SQL string or a Pytho
 - `lib/viewEngine.ts`: filter/sort/group. Pure, unit-tested.
 - `screens/`: `Home` (tiles), `Smart` (Today, Inbox, Missed, Tasks matrix), `Browse` (Topics, Studies, Timeline, Search, My views, Guide), `ItemScreen`, `ViewScreen` + `ViewEditScreen` (views as questions; list or importance/urgency matrix, all vertical), `Settings`.
 - `components/AddPanel.tsx`: the one add flow (text + optional type/inside/when/priority), used inline on the main page and as a sheet from the "+ הוסף" button that `Screen` shows with a per-screen context.
+- `lib/areas.ts` + `components/AreaPicker.tsx`: areas (tasks, studies, topics…) chosen on first launch; each maps to item types (archived when off) and main-page tiles. Stored in the `settings` table (`/api/settings/areas`).
+- `lib/quickParse.ts`: plain-language quick add (dates, #place, !), unit-tested.
 - `lib/relevance.ts`: which built-in properties fit which item type; used by the item screen, the add panel and the view editor.
 - `lib/viewText.ts`: views as plain answers (`ViewSpec`) ⇄ stored filters, and the one-sentence description.
 - `components/kit.tsx`: `Screen` frame (back pill + big title + optional add button), `Row` (the one item row used everywhere), `TypeLabel`, `Chip`. `components/FieldEditor.tsx`: one editor per property kind. `components/ui.tsx`: popovers, menus, toasts, buttons.
@@ -42,4 +45,4 @@ Schema/data changes: append to `MIGRATIONS` in `db.py` (an SQL string or a Pytho
 
 ## Tests
 - `backend/tests`: recurrence rules, API behaviors (inbox, postpone, snooze, missed, cycles, option removal, type conversion, delete/restore).
-- `frontend/src/lib/viewEngine.test.ts`: filters, sort, grouping.
+- `frontend/src/lib/viewEngine.test.ts`: filters, sort, grouping. `quickParse.test.ts`: Hebrew quick-add parsing.

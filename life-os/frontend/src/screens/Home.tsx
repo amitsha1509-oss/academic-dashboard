@@ -1,5 +1,6 @@
 import { CalendarRange, CircleAlert, Folder, GraduationCap, Inbox, Layers, ListChecks, Search, Settings, Sun, type LucideIcon } from "lucide-react";
 import { AddPanel } from "../components/AddPanel";
+import { useAreas } from "../lib/areas";
 import { daysBetween, formatLongDate, formatWhen, todayISO } from "../lib/dates";
 import { openItem, useNav, type ScreenName } from "../lib/nav";
 import { useServerData, useStore } from "../lib/store";
@@ -39,7 +40,7 @@ function Tile({ to, icon: Icon, name, count, hint, warn }: {
       className="grid content-start gap-2.5 rounded-[20px] bg-surface p-4 pb-[18px] text-start transition-transform hover:bg-active active:scale-[0.97]">
       <span className="flex items-center justify-between">
         <Icon size={23} strokeWidth={1.75} />
-        {count !== undefined && (
+        {count !== undefined && count !== 0 && (
           <span className={`display text-[32px] leading-none tabular-nums ${warn ? "text-danger" : ""}`}>{count}</span>
         )}
       </span>
@@ -50,7 +51,8 @@ function Tile({ to, icon: Icon, name, count, hint, warn }: {
 }
 
 export function HomeScreen() {
-  const { items, views, types } = useStore();
+  const { items, views } = useStore();
+  const { tileOn } = useAreas();
   const { push } = useNav();
   const today = todayISO();
   const t = useServerData<TodayData>(`/smart/today?day=${today}`);
@@ -66,7 +68,6 @@ export function HomeScreen() {
   const todayCount = t ? t.schedule.filter((e) => e.status === "open").length + t.due_today.length + t.overdue.length : undefined;
   const missed = missedTotal(m);
   const nextExam = byType("exam").map((e) => e.when_at?.slice(0, 10)).filter((d): d is string => !!d && d >= today).sort()[0];
-  const hasTypes = (id: string) => types.some((x) => x.id === id && !x.archived);
   const firstRun = items.length === 0;
 
   return (
@@ -99,27 +100,26 @@ export function HomeScreen() {
       ) : (
         <div className="grid gap-1 rounded-[22px] bg-surface p-5">
           <span className="text-[13px] font-medium text-muted">הדבר הבא</span>
-          <span className="display text-[22px]">שום דבר לא מתוזמן. זמן טוב לסדר את תיבת הקליטה.</span>
+          <span className="display text-[22px]">{inbox.length ? "שום דבר לא מתוזמן. זמן טוב לסדר את תיבת הקליטה." : "שום דבר לא מתוזמן כרגע."}</span>
         </div>
       )}
 
-      <nav aria-label="אזורים" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
-        <Tile to="today" icon={Sun} name="היום" count={todayCount} hint={t?.schedule[0] ? `ראשון ב־${t.schedule[0].time ?? "היום"}` : "מה יש לך היום"} />
+      <nav aria-label="אזורים" className="grid grid-cols-2 gap-2.5 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2 sm:grid-cols-3 md:grid-cols-4">
+        <Tile to="today" icon={Sun} name="היום" count={todayCount}
+          hint={t?.schedule[0] ? `ראשון ב־${t.schedule[0].time ?? "היום"}` : todayCount ? "מה יש לך היום" : "אין כלום להיום"} />
         <Tile to="inbox" icon={Inbox} name="תיבת קליטה" count={inbox.length} hint={inbox.length ? "ממתינים לסידור" : "ריקה"} />
         <Tile to="missed" icon={CircleAlert} name="פספוסים" count={missed} warn={missed > 0} hint={missed ? "דברים שלא סומנו" : "שום דבר לא נשכח"} />
-        <Tile to="tasks" icon={ListChecks} name="משימות" count={tasks.length} hint="לפי חשיבות ודחיפות" />
-        {hasTypes("topic") && <Tile to="topics" icon={Folder} name="נושאים" count={topics.length} hint={topics.slice(0, 3).map((x) => x.title).join(", ") || "השקעות, בריאות…"} />}
-        {hasTypes("course") && <Tile to="studies" icon={GraduationCap} name="לימודים" count={courses.length} hint="קורסים, הרצאות ומבחנים" />}
-        <Tile to="timeline" icon={CalendarRange} name="ציר זמן" count={nextExam ? daysBetween(today, nextExam) : undefined}
-          hint={nextExam ? "ימים למבחן הקרוב" : "התמונה הגדולה"} />
-        <Tile to="views" icon={Layers} name="התצוגות שלי" count={views.length} hint={views.slice(0, 2).map((v) => v.name).join(", ") || "רשימות משלך"} />
+        {tileOn("tasks") && <Tile to="tasks" icon={ListChecks} name="משימות" count={tasks.length} hint={tasks.length ? "לפי חשיבות ודחיפות" : "עוד אין משימות"} />}
+        {tileOn("topics") && <Tile to="topics" icon={Folder} name="נושאים" count={topics.length} hint={topics.slice(0, 3).map((x) => x.title).join(", ") || "למשל השקעות, בריאות"} />}
+        {tileOn("studies") && <Tile to="studies" icon={GraduationCap} name="לימודים" count={courses.length} hint={courses.length ? "קורסים, הרצאות ומבחנים" : "עוד אין קורסים"} />}
+        {tileOn("timeline") && <Tile to="timeline" icon={CalendarRange} name="ציר זמן" count={nextExam ? daysBetween(today, nextExam) : undefined}
+          hint={nextExam ? "ימים למבחן הקרוב" : "התמונה הגדולה"} />}
+        {tileOn("views") && <Tile to="views" icon={Layers} name="רשימות משלי" count={views.length} hint={views.slice(0, 2).map((v) => v.name).join(", ") || "רשימות שאתה מרכיב"} />}
       </nav>
-
-      <button type="button" onClick={() => push({ name: "guide" })}
-        className="flex items-center justify-between rounded-[20px] border-2 border-ink px-5 py-4 text-start">
-        <span className="display text-[16px] font-bold">איך זה עובד? מדריך קצר</span>
-        <span aria-hidden="true" className="text-faint">‹</span>
-      </button>
+      <div className="-mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[14px] font-medium text-muted">
+        <button type="button" onClick={() => push({ name: "settings" })} className="underline-offset-4 hover:text-ink hover:underline">לשנות מה מופיע כאן</button>
+        <button type="button" onClick={() => push({ name: "guide" })} className="underline-offset-4 hover:text-ink hover:underline">איך זה עובד?</button>
+      </div>
     </div>
   );
 }

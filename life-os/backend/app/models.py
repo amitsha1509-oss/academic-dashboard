@@ -109,3 +109,7 @@ class ViewPatch(BaseModel):
     icon: Optional[str] = Field(default=None, max_length=8)
     config: Optional[dict[str, Any]] = None
     sort: Optional[int] = None
+
+
+class SettingValue(BaseModel):
+    value: Any

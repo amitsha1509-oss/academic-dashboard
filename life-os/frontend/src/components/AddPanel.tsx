@@ -3,6 +3,7 @@
 import { Plus, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { addDays, formatWhen, parseDate, todayISO } from "../lib/dates";
+import { parseQuick, stripWords } from "../lib/quickParse";
 import { openItem } from "../lib/nav";
 import { useStore } from "../lib/store";
 import type { Item, ItemPatch } from "../lib/types";
@@ -59,10 +60,12 @@ export function AddPanel({ defaults = {}, autoFocus, collapsible, onSaved }: {
   const [title, setTitle] = useState("");
   const [focused, setFocused] = useState(false);
   const [typeId, setTypeId] = useState<string | null>(defaults.type_id ?? null);
-  const [parentId, setParentId] = useState<string | null>(defaults.parent_id ?? null);
-  const [date, setDate] = useState<string | null>(defaults.when === "today" ? today : null);
+  // What was picked by tapping (undefined = not touched). Untouched options take what the text
+  // says ("מחר", "#השקעות", "!"), then the screen's defaults.
+  const [parentPick, setParentId] = useState<string | null | undefined>(undefined);
+  const [datePick, setDate] = useState<string | null | undefined>(undefined);
   const [pickingDate, setPickingDate] = useState(false);
-  const [important, setImportant] = useState(false);
+  const [importantPick, setImportant] = useState<boolean | undefined>(undefined);
   const [urgent, setUrgent] = useState(false);
   const [q, setQ] = useState("");
   const form = useRef<HTMLFormElement>(null);
@@ -87,10 +90,20 @@ export function AddPanel({ defaults = {}, autoFocus, collapsible, onSaved }: {
   const chosenType = liveTypes.find((t) => t.id === typeId);
 
   // Places to put things: topics, active courses and projects, the busiest first.
-  const containers = useMemo(() => items
+  const places = useMemo(() => items
     .filter((i) => CONTAINER_TYPES.includes(i.type_id ?? "") && i.status === "open" && (!i.span_end || i.span_end >= today))
-    .sort((a, b) => (childrenOf.get(b.id)?.length ?? 0) - (childrenOf.get(a.id)?.length ?? 0))
-    .slice(0, 5), [items, childrenOf, today]);
+    .sort((a, b) => (childrenOf.get(b.id)?.length ?? 0) - (childrenOf.get(a.id)?.length ?? 0)), [items, childrenOf, today]);
+  const containers = places.slice(0, 5);
+
+  const parsed = useMemo(() => parseQuick(title, places, today), [title, places, today]);
+  const parentId = parentPick !== undefined ? parentPick : parsed.parentId ?? defaults.parent_id ?? null;
+  const date = datePick !== undefined ? datePick : parsed.date ?? (defaults.when === "today" ? today : null);
+  const important = importantPick !== undefined ? importantPick : parsed.important;
+  const understood = [
+    datePick === undefined && parsed.date ? formatWhen(parsed.date) : null,
+    parentPick === undefined && parsed.parentId ? `בתוך ${itemsById.get(parsed.parentId)?.title}` : null,
+    importantPick === undefined && parsed.important ? "חשוב" : null,
+  ].filter(Boolean);
   const parent = parentId ? itemsById.get(parentId) : undefined;
   const placeChips = parent && !containers.some((c) => c.id === parent.id) ? [parent, ...containers.slice(0, 4)] : containers;
   const searchResults = items.filter((i) => i.status !== "dropped" && q && i.title.includes(q)).slice(0, 20);
@@ -98,15 +111,20 @@ export function AddPanel({ defaults = {}, autoFocus, collapsible, onSaved }: {
   const reset = () => {
     setTitle("");
     setTypeId(defaults.type_id ?? null);
-    setParentId(defaults.parent_id ?? null);
-    setDate(defaults.when === "today" ? today : null);
+    setParentId(undefined);
+    setDate(undefined);
     setPickingDate(false);
-    setImportant(false);
+    setImportant(undefined);
     setUrgent(false);
   };
 
   const save = async () => {
-    const t = title.trim();
+    // Words whose meaning was used come out of the title.
+    const t = stripWords(title, [
+      datePick === undefined ? parsed.dateText : null,
+      parentPick === undefined ? parsed.parentText : null,
+      importantPick === undefined ? parsed.importantText : null,
+    ]);
     if (!t) { input.current?.focus(); return; }
     const body: ItemPatch & { title: string } = { title: t, type_id: typeId, parent_id: showPlace ? parentId : null };
     if (date && showDate) {
@@ -136,6 +154,11 @@ export function AddPanel({ defaults = {}, autoFocus, collapsible, onSaved }: {
           placeholder="מה עלה לך בראש?" enterKeyHint="done" aria-label="מה להוסיף"
           className="min-w-0 flex-1 bg-transparent py-3 text-[18px] outline-none placeholder:text-faint" />
       </div>
+      {open && (understood.length ? (
+        <p className="-mt-1 text-[13.5px] font-medium text-accent">הבנתי: {understood.join(" · ")}</p>
+      ) : (
+        <p className="-mt-1 text-[13px] text-muted">אפשר לכתוב כמו שמדברים: ״להתקשר לבנק מחר #השקעות״</p>
+      ))}
 
       {open && (
         <>
@@ -169,7 +192,7 @@ export function AddPanel({ defaults = {}, autoFocus, collapsible, onSaved }: {
               </Popover>
             </OptRow>}
 
-            {showDate && <OptRow label="מתי">
+            {showDate && <OptRow label={typeId && TIMED_TYPES.has(typeId) ? "מתי" : "עד מתי"}>
               <Opt on={date === today} onClick={() => setDate(date === today ? null : today)}>היום</Opt>
               <Opt on={date === addDays(today, 1)} onClick={() => setDate(date === addDays(today, 1) ? null : addDays(today, 1))}>מחר</Opt>
               <Opt on={date === endOfWeek(today)} onClick={() => setDate(date === endOfWeek(today) ? null : endOfWeek(today))}>עד סוף השבוע</Opt>
