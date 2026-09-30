@@ -6,7 +6,7 @@ import { HomeScreen } from "./screens/Home";
 import { ItemScreen } from "./screens/ItemScreen";
 import { SettingsScreen } from "./screens/Settings";
 import { InboxScreen, MissedScreen, TasksScreen, TodayScreen } from "./screens/Smart";
-import { ViewScreen } from "./screens/ViewScreen";
+import { ViewEditScreen, ViewScreen } from "./screens/ViewScreen";
 
 function CurrentScreen() {
   const route = useRoute();
@@ -20,6 +20,7 @@ function CurrentScreen() {
     case "timeline": return <TimelineScreen />;
     case "views": return <ViewsScreen />;
     case "view": return <ViewScreen id={route.arg!} />;
+    case "viewEdit": return <ViewEditScreen id={route.arg ?? "new"} />;
     case "item": return <ItemScreen id={route.arg!} />;
     case "search": return <SearchScreen />;
     case "settings": return <SettingsScreen />;

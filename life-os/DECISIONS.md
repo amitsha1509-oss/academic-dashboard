@@ -17,3 +17,8 @@ Newest at the bottom. One line of why for each.
 - **2026-09-29 · Built-in screens for Tasks, Topics, Studies and Timeline; views are the user's extras.** Each screen shows only the item types it's for (the tasks matrix never shows courses or lectures).
 - **2026-09-29 · Board and table layouts removed.** They scrolled sideways; lists and a vertical matrix cover the same needs.
 - **2026-09-29 · Design is agreed on a clickable prototype before building.** The first version was built before any design was shown, and looked generic.
+- **2026-09-30 · One way to add, everywhere.** A line of text plus optional type / inside / when / priority (`AddPanel`). Nothing chosen → inbox. On screens it opens from a labeled "+ הוסף" button prefilled with the screen's context; inside an item it's "פריט חדש בתוך X". The separate "new topic…" lines were removed.
+- **2026-09-30 · Offer only what fits the type (`lib/relevance.ts`).** A topic isn't offered a due date or urgency; view questions and add options follow the chosen type. Values already set are always shown.
+- **2026-09-30 · "פרט לפריט הזה" vs "פריט חדש בתוך X".** Two named buttons instead of one ambiguous "add". "להציג תמיד" pins a property on every item of that type.
+- **2026-09-30 · Views are built by answering plain questions**, and each view shows a one-sentence description of what it contains. Filter chips were removed from the view screen.
+- **2026-09-30 · Property names are gray text, values sit in white boxes, empty values say "בחר…" in blue.** Names and empty values looked the same.

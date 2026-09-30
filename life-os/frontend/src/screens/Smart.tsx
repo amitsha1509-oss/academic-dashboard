@@ -42,11 +42,11 @@ export function TodayScreen() {
   const { itemsById } = useStore();
   const today = todayISO();
   const t = useServerData<TodayData>(`/smart/today?day=${today}`);
-  if (!t) return <Screen title="היום">{null}</Screen>;
+  if (!t) return <Screen title="היום" add={{ type_id: "task", when: "today" }}>{null}</Screen>;
   const overdue = pick(t.overdue, itemsById);
   const returned = pick(t.returned, itemsById);
   return (
-    <Screen title="היום" subtitle={formatLongDate(today)}>
+    <Screen title="היום" subtitle={formatLongDate(today)} add={{ type_id: "task", when: "today" }}>
       <Section title="לוח זמנים" count={t.schedule.length}>
         {t.schedule.length ? t.schedule.map((e) => <ScheduleRow key={`${e.item_id}-${e.date}`} entry={e} />)
           : <EmptyNote>שום דבר לא מתוזמן להיום.</EmptyNote>}
@@ -132,12 +132,12 @@ function MissedOccurrences({ item, occurrences }: { item: Item; occurrences: Occ
 export function MissedScreen() {
   const { itemsById, updateItem } = useStore();
   const m = useServerData<MissedData>(`/smart/missed?day=${todayISO()}`);
-  if (!m) return <Screen title="פספוסים">{null}</Screen>;
+  if (!m) return <Screen title="פספוסים" add={false}>{null}</Screen>;
   const groups = new Map<string, Occurrence[]>();
   for (const o of m.occurrences) groups.set(o.item_id, [...(groups.get(o.item_id) ?? []), o]);
   const total = m.occurrences.length + m.overdue.length + m.past_unmarked.length + m.postponed.length + m.stale_inbox.length;
   return (
-    <Screen title="פספוסים" subtitle="מתעדכן לבד. מספיק לעבור על זה פעם בשבוע.">
+    <Screen title="פספוסים" add={false} subtitle="מתעדכן לבד. מספיק לעבור על זה פעם בשבוע.">
       {total === 0 && <EmptyNote>שום דבר לא נשכח.</EmptyNote>}
       {groups.size > 0 && (
         <Section title="לא סומנו" count={m.occurrences.length} sub="הרצאות, אימונים וכל מה שחוזר">
@@ -201,7 +201,7 @@ export function TasksScreen() {
   const hasMatrix = ["importance", "urgency"].every((id) => properties.some((p) => p.id === id && !p.archived));
   if (!hasMatrix) {
     return (
-      <Screen title="משימות" subtitle="כל המשימות הפתוחות.">
+      <Screen title="משימות" subtitle="כל המשימות הפתוחות." add={{ type_id: "task" }}>
         <Section title="פתוחות" count={tasks.length}>
           {tasks.length ? tasks.map((i) => <Row key={i.id} item={i} hideType />) : <EmptyNote>אין משימות פתוחות.</EmptyNote>}
         </Section>
@@ -210,7 +210,7 @@ export function TasksScreen() {
   }
   const unsorted = tasks.filter((i) => !i.props.importance || !i.props.urgency);
   return (
-    <Screen title="משימות" subtitle="רק משימות פתוחות, לפי חשיבות ודחיפות. קורסים, נושאים והרצאות לא מופיעים כאן.">
+    <Screen title="משימות" subtitle="רק משימות פתוחות, לפי חשיבות ודחיפות. קורסים, נושאים והרצאות לא מופיעים כאן." add={{ type_id: "task" }}>
       {QUADRANTS.map((q) => {
         const list = tasks.filter((i) => i.props.importance === q.imp && i.props.urgency === q.urg);
         return (

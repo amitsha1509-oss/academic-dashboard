@@ -33,8 +33,11 @@ Schema/data changes: append to `MIGRATIONS` in `db.py` (an SQL string or a Pytho
 - `lib/store.tsx`: loads everything once (`/api/bootstrap`); optimistic writes with rollback + error toast; refetches when the tab becomes visible.
 - `lib/fields.ts`: **the field registry**. One description for every core and custom property (read, group, filter, set). Views, filters and bulk edits go through it, so a new property works everywhere automatically.
 - `lib/viewEngine.ts`: filter/sort/group. Pure, unit-tested.
-- `screens/`: `Home` (tiles), `Smart` (Today, Inbox, Missed, Tasks matrix), `Browse` (Topics, Studies, Timeline, Search, My views, Guide), `ItemScreen`, `ViewScreen` (list or matrix, all vertical), `Settings`.
-- `components/kit.tsx`: `Screen` frame (back pill + big title), `Row` (the one item row used everywhere), `TypeLabel`, `Chip`, `QuickAdd`. `components/FieldEditor.tsx`: one editor per property kind. `components/ui.tsx`: popovers, menus, toasts, buttons.
+- `screens/`: `Home` (tiles), `Smart` (Today, Inbox, Missed, Tasks matrix), `Browse` (Topics, Studies, Timeline, Search, My views, Guide), `ItemScreen`, `ViewScreen` + `ViewEditScreen` (views as questions; list or importance/urgency matrix, all vertical), `Settings`.
+- `components/AddPanel.tsx`: the one add flow (text + optional type/inside/when/priority), used inline on the main page and as a sheet from the "+ הוסף" button that `Screen` shows with a per-screen context.
+- `lib/relevance.ts`: which built-in properties fit which item type; used by the item screen, the add panel and the view editor.
+- `lib/viewText.ts`: views as plain answers (`ViewSpec`) ⇄ stored filters, and the one-sentence description.
+- `components/kit.tsx`: `Screen` frame (back pill + big title + optional add button), `Row` (the one item row used everywhere), `TypeLabel`, `Chip`. `components/FieldEditor.tsx`: one editor per property kind. `components/ui.tsx`: popovers, menus, toasts, buttons.
 - Style (direction C, "bright and bold"): tokens in `index.css` (light + dark), Heebo 800 for headings (`.display`), IBM Plex Sans Hebrew for text, both bundled. Types are shown as a colored dot + name (`--dot-<color>`), never emoji. Use logical classes (`ms-`, `ps-`, `start-`), never left/right. Content flows top to bottom; nothing scrolls sideways.
 
 ## Tests

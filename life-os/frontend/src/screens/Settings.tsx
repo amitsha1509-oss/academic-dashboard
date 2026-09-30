@@ -208,7 +208,7 @@ export function SettingsScreen() {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("properties");
   const current = TABS.find((t) => t.id === tab)!;
   return (
-    <Screen title="הגדרות" subtitle="מאפיינים, סוגי פריטים, גיבוי וסל מחזור.">
+    <Screen title="הגדרות" add={false} subtitle="מאפיינים, סוגי פריטים, גיבוי וסל מחזור.">
       <div className="flex flex-wrap gap-2">
         {TABS.map((t) => (
           <button key={t.id} type="button" onClick={() => setTab(t.id)}

@@ -76,8 +76,10 @@ export function StatusCheck({ done, onToggle, size = 21, color }: { done: boolea
  * never clipped by scrolling containers, and flips upward near the bottom of the screen.
  */
 export function Popover({
-  trigger, children, width = 260, className = "",
+  trigger, children, width = 260, className = "", block = false,
 }: {
+  /** Let the trigger fill its container's width. */
+  block?: boolean;
   trigger: (props: { open: boolean; toggle: () => void }) => ReactNode;
   children: (close: () => void) => ReactNode;
   width?: number;
@@ -123,10 +125,11 @@ export function Popover({
 
   return (
     <>
-      <span ref={anchor} className="inline-flex max-w-full">{trigger({ open, toggle: () => setOpen((o) => !o) })}</span>
+      <span ref={anchor} className={block ? "flex w-full" : "inline-flex max-w-full"}>{trigger({ open, toggle: () => setOpen((o) => !o) })}</span>
       {open && (
         <div
           ref={panel}
+          data-popover
           style={style}
           className={`z-50 max-h-[min(380px,70vh)] overflow-y-auto rounded-2xl bg-popover p-1.5 shadow-pop ${className}`}
         >

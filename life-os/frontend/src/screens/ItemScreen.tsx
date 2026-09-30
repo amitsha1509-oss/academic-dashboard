@@ -1,7 +1,8 @@
 import { AlarmClock, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FieldEditor } from "../components/FieldEditor";
-import { Chip, EmptyNote, QuickAdd, Row, Screen } from "../components/kit";
+import { Chip, EmptyNote, Row, Screen } from "../components/kit";
+import { AddSheet } from "../components/AddPanel";
 import { Divider, IconButton, MenuItem, MenuLabel, Popover, Section, StatusCheck } from "../components/ui";
 import { addDays, formatWhen, todayISO } from "../lib/dates";
 import { isEmpty, type Field } from "../lib/fields";
@@ -9,6 +10,7 @@ import { openItem, useNav } from "../lib/nav";
 import { useServerData, useStore } from "../lib/store";
 import type { Item, ItemPatch, Occurrence, PropType } from "../lib/types";
 import { isCheckable } from "../components/kit";
+import { isRelevant } from "../lib/relevance";
 
 export const PROP_TYPE_LABELS: Record<PropType, string> = {
   text: "טקסט", number: "מספר", date: "תאריך", choice: "בחירה", multi: "בחירה מרובה", checkbox: "תיבת סימון", url: "קישור",
@@ -30,13 +32,15 @@ function clearPatch(field: Field): ItemPatch {
 }
 
 // Shown elsewhere on the screen, or not meant to be edited per item.
-const HIDDEN = new Set(["title", "notes", "status", "created", "inbox"]);
+// (Snoozing has its own button in the header.)
+const HIDDEN = new Set(["title", "notes", "status", "created", "inbox", "snooze"]);
 
 export function ItemScreen({ id }: { id: string }) {
   const { itemsById, childrenOf, fields, types, updateItem, deleteItem } = useStore();
   const { back } = useNav();
   const item = itemsById.get(id);
   const [extra, setExtra] = useState<string[]>([]); // properties opened here but still empty
+  const [adding, setAdding] = useState(false);
   useEffect(() => setExtra([]), [id]);
 
   if (!item) {
@@ -45,9 +49,12 @@ export function ItemScreen({ id }: { id: string }) {
 
   const type = types.find((t) => t.id === item.type_id);
   const suggested = type?.suggested ?? [];
-  const visible = fields.filter((f) =>
-    !HIDDEN.has(f.key) && (f.key === "type" || !isEmpty(f.get(item)) || suggested.includes(f.key) || extra.includes(f.key)));
-  const hidden = fields.filter((f) => !HIDDEN.has(f.key) && !visible.includes(f));
+  // Shown: the type, "inside" when it fits, anything with a value, the type's pinned fields, and ones opened here.
+  const visible = fields.filter((f) => !HIDDEN.has(f.key) && (
+    f.key === "type" || !isEmpty(f.get(item)) || extra.includes(f.key) ||
+    ((f.key === "parent" || suggested.includes(f.key)) && isRelevant(item.type_id, f.key))));
+  // Offered in "פרט לפריט הזה": only what fits this type.
+  const hidden = fields.filter((f) => !HIDDEN.has(f.key) && !visible.includes(f) && isRelevant(item.type_id, f.key));
   const children = childrenOf.get(item.id) ?? [];
   const done = item.status === "done";
 
@@ -58,6 +65,7 @@ export function ItemScreen({ id }: { id: string }) {
 
   return (
     <Screen
+      add={false}
       actions={<>
         <SnoozeButton item={item} />
         <IconButton label="מחק" onClick={() => { deleteItem(item.id); back(); }}><Trash2 size={18} /></IconButton>
@@ -94,7 +102,7 @@ export function ItemScreen({ id }: { id: string }) {
         <div className="rounded-[20px] bg-surface px-4 py-1">
           {visible.map((f, i) => (
             <div key={f.key} className={`group grid grid-cols-[96px_1fr_auto] items-center gap-2 py-2 md:grid-cols-[130px_1fr_auto] ${i ? "border-t border-line" : ""}`}>
-              <span className="text-[15px] text-muted">{f.key === "parent" ? "בתוך" : f.label}</span>
+              <span className="text-[14px] text-muted">{f.key === "parent" ? "בתוך" : f.label}</span>
               <div className="min-w-0"><FieldEditor field={f} item={item} /></div>
               {!isEmpty(f.get(item)) && f.key !== "type" ? (
                 <IconButton label={`נקה ${f.label}`} className="opacity-50 group-hover:opacity-100"
@@ -105,8 +113,20 @@ export function ItemScreen({ id }: { id: string }) {
             </div>
           ))}
         </div>
-        <AddPropertyMenu hidden={hidden} onAdd={(key) => setExtra((e) => [...e, key])} />
       </div>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <AddPropertyMenu hidden={hidden} typeId={item.type_id} onAdd={(key) => setExtra((e) => [...e, key])} />
+        <button type="button" onClick={() => setAdding(true)}
+          className="flex items-center gap-3 rounded-[18px] border-2 border-ink px-4 py-3 text-start">
+          <Plus size={20} className="shrink-0" />
+          <span className="grid">
+            <span className="text-[15.5px] font-medium">פריט חדש בתוך {item.title}</span>
+            <span className="text-[13px] text-muted">משימה, רעיון, פתק, הרצאה…</span>
+          </span>
+        </button>
+      </div>
+      <AddSheet open={adding} onClose={() => setAdding(false)} defaults={{ parent_id: item.id, type_id: commonType(children) }} />
 
       <NotesEditor key={`n-${item.id}`} item={item} />
 
@@ -114,7 +134,7 @@ export function ItemScreen({ id }: { id: string }) {
 
       <Section title="בפנים" count={children.length || undefined} action={children.length ? <Progress items={children} /> : undefined}>
         <ChildList items={children} />
-        <QuickAdd placeholder="הוסף פריט בפנים…" fields={{ parent_id: item.id, type_id: commonType(children) }} />
+        {!children.length && <EmptyNote>עוד אין כלום בפנים. "פריט חדש בתוך" מוסיף לכאן.</EmptyNote>}
       </Section>
     </Screen>
   );
@@ -165,27 +185,46 @@ function NotesEditor({ item }: { item: Item }) {
   );
 }
 
-function AddPropertyMenu({ hidden, onAdd }: { hidden: Field[]; onAdd: (key: string) => void }) {
-  const { createProperty } = useStore();
+function AddPropertyMenu({ hidden, onAdd, typeId }: { hidden: Field[]; onAdd: (key: string) => void; typeId: string | null }) {
+  const { createProperty, types, updateType, toast } = useStore();
   const [name, setName] = useState("");
   const [type, setType] = useState<PropType>("text");
+  const [always, setAlways] = useState(false);
+  const itemType = types.find((t) => t.id === typeId);
+  const add = (key: string) => {
+    onAdd(key);
+    if (always && itemType && !itemType.suggested.includes(key)) {
+      updateType(itemType.id, { suggested: [...itemType.suggested, key] });
+      toast(`יופיע מעכשיו בכל פריט מסוג ${itemType.name}`);
+    }
+  };
   const create = async (close: () => void) => {
     if (!name.trim()) return;
     const p = await createProperty(name.trim(), type);
-    if (p) onAdd(p.id);
+    if (p) add(p.id);
     setName("");
     close();
   };
   return (
-    <Popover width={290} trigger={({ toggle }) => (
-      <button type="button" onClick={toggle} className="inline-flex items-center gap-1.5 justify-self-start rounded-full px-3 py-1.5 text-[14px] font-medium text-muted hover:bg-hover hover:text-ink">
-        <Plus size={16} /> הוסף מאפיין
+    <Popover width={290} block trigger={({ toggle }) => (
+      <button type="button" onClick={toggle} className="flex w-full items-center gap-3 rounded-[18px] bg-surface px-4 py-3 text-start hover:bg-active">
+        <Plus size={20} className="shrink-0" />
+        <span className="grid">
+          <span className="text-[15.5px] font-medium">פרט לפריט הזה</span>
+          <span className="text-[13px] text-muted">תאריך, חשיבות, בתוך נושא, קישור…</span>
+        </span>
       </button>
     )}>
       {(close) => (
         <>
-          {hidden.length > 0 && <MenuLabel>מאפיינים קיימים</MenuLabel>}
-          {hidden.map((f) => <MenuItem key={f.key} onClick={() => { onAdd(f.key); close(); }}>{f.key === "parent" ? "בתוך" : f.label}</MenuItem>)}
+          {itemType && (
+            <label className="mb-1 flex cursor-pointer items-center gap-2.5 rounded-xl bg-surface px-3 py-2.5 text-[14.5px]">
+              <input type="checkbox" checked={always} onChange={(e) => setAlways(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
+              להציג תמיד בכל פריט מסוג {itemType.name}
+            </label>
+          )}
+          {hidden.length > 0 && <MenuLabel>מאפיינים שמתאימים ל{itemType ? itemType.name : "פריט הזה"}</MenuLabel>}
+          {hidden.map((f) => <MenuItem key={f.key} onClick={() => { add(f.key); close(); }}>{f.key === "parent" ? "בתוך" : f.label}</MenuItem>)}
           <Divider />
           <MenuLabel>מאפיין חדש</MenuLabel>
           <div className="grid gap-2 p-2">

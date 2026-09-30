@@ -1,16 +1,19 @@
 // The building blocks every screen is made of: the screen frame, item rows, type labels.
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import type { ReactNode } from "react";
 import { formatWhen, todayISO } from "../lib/dates";
 import { openItem, useNav } from "../lib/nav";
 import { useStore } from "../lib/store";
 import type { Item } from "../lib/types";
 import { describeRepeat } from "./FieldEditor";
 import { StatusCheck } from "./ui";
+import { AddButton, type AddDefaults } from "./AddPanel";
 
 /** A full screen: back button, big title, and content flowing top to bottom. */
-export function Screen({ title, subtitle, actions, children, titleNode }: {
+export function Screen({ title, subtitle, actions, children, titleNode, add = {} }: {
   title?: ReactNode; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; titleNode?: ReactNode;
+  /** What the floating + prefills on this screen (false hides it). */
+  add?: AddDefaults | false;
 }) {
   const { back, home, stack } = useNav();
   return (
@@ -28,7 +31,7 @@ export function Screen({ title, subtitle, actions, children, titleNode }: {
           )}
         </div>
       </div>
-      <div className="grid gap-8 px-5 pt-2 pb-16">
+      <div className="grid gap-8 px-5 pt-2 pb-32">
         {(title || titleNode) && (
           <header className="grid gap-1.5">
             {titleNode ?? <h1 className="display text-[36px] md:text-[42px]">{title}</h1>}
@@ -37,6 +40,7 @@ export function Screen({ title, subtitle, actions, children, titleNode }: {
         )}
         {children}
       </div>
+      {add !== false && <AddButton defaults={add} />}
     </div>
   );
 }
@@ -119,22 +123,4 @@ export function Chip({ children, onClick, primary, active }: { children: ReactNo
 
 export function EmptyNote({ children }: { children: ReactNode }) {
   return <div className="border-b border-line py-3 text-[15px] text-faint">{children}</div>;
-}
-
-/** "+ new …" line at the end of a list. Creates an item with the given fields. */
-export function QuickAdd({ placeholder, fields }: { placeholder: string; fields: Partial<Item> }) {
-  const { createItem } = useStore();
-  const [title, setTitle] = useState("");
-  const add = async () => {
-    if (!title.trim()) return;
-    await createItem({ ...fields, title: title.trim(), inbox: false });
-    setTitle("");
-  };
-  return (
-    <form onSubmit={(e) => { e.preventDefault(); add(); }} className="flex items-center gap-3 border-b border-line py-3">
-      <Plus size={20} className="shrink-0 text-faint" />
-      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={placeholder} enterKeyHint="done"
-        className="min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-faint" />
-    </form>
-  );
 }

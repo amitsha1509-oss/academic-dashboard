@@ -7,8 +7,10 @@ import { useStore } from "../lib/store";
 import type { Item, ItemPatch, Link, PropertyDef, Repeat } from "../lib/types";
 import { Button, COLORS, Divider, IconButton, MenuItem, Popover, SearchInput, Tag } from "./ui";
 
-const valueBox = "flex min-h-8 w-full min-w-0 items-center rounded-md px-2 text-start hover:bg-hover";
-const placeholder = <span className="text-faint">ריק</span>;
+// Values sit in white boxes; the property's name next to them is plain gray text. An empty value
+// says "בחר…" in blue, so it's obvious what to tap.
+const valueBox = "flex min-h-9 w-full min-w-0 items-center rounded-xl bg-canvas px-3 py-1 text-start transition-colors hover:bg-active";
+const placeholder = <span className="font-medium text-accent">בחר…</span>;
 
 export function FieldEditor({ field, item }: { field: Field; item: Item }) {
   const { updateItem } = useStore();
@@ -98,8 +100,8 @@ function TextValue({ field, item }: { field: Field; item: Item }) {
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-        placeholder="ריק"
-        className="min-h-8 w-full min-w-0 rounded-md bg-transparent px-2 text-start outline-none placeholder:text-faint hover:bg-hover focus:bg-hover"
+        placeholder="הקלד…"
+        className="min-h-9 w-full min-w-0 rounded-xl bg-canvas px-3 text-start outline-none placeholder:font-medium placeholder:text-accent hover:bg-active focus:ring-2 focus:ring-accent"
       />
       {field.kind === "url" && typeof value === "string" && (
         <a href={value} target="_blank" rel="noreferrer" className="text-muted hover:text-ink" aria-label="פתח קישור">
@@ -116,23 +118,34 @@ export function DateTimeInput({ value, onChange, allowTime = true, quick = false
   const day = value?.slice(0, 10) ?? "";
   const time = timeOf(value);
   const [showTime, setShowTime] = useState(!!time);
+  const [editing, setEditing] = useState(false);
   const today = todayISO();
   const set = (d: string, t: string | null) => onChange(d ? (t ? `${d}T${t}` : d) : null);
+  if (!value && !editing) {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button type="button" onClick={() => setEditing(true)} className={valueBox}>
+          <span className="font-medium text-accent">בחר תאריך…</span>
+        </button>
+        {quick && (
+          <>
+            <Button variant="outline" className="h-8 text-xs" onClick={() => onChange(addDays(today, 1))}>מחר</Button>
+            <Button variant="outline" className="h-8 text-xs" onClick={() => onChange(addDays(today, 7))}>בעוד שבוע</Button>
+          </>
+        )}
+      </div>
+    );
+  }
   return (
-    <div className="flex w-full flex-wrap items-center gap-1 px-1">
-      <input type="date" value={day} onChange={(e) => set(e.target.value, time)} className="rounded-md px-1 hover:bg-hover" />
+    <div className="flex w-full flex-wrap items-center gap-1 rounded-xl bg-canvas px-2 py-0.5">
+      <input type="date" value={day} autoFocus={editing && !value} aria-label="תאריך"
+        ref={(el) => { if (el && editing && !value) try { el.showPicker(); } catch { /* not supported */ } }}
+        onChange={(e) => { set(e.target.value, time); setEditing(false); }} className="rounded-lg px-1" />
       {allowTime && day && (showTime || time ? (
-        <input type="time" value={time ?? ""} onChange={(e) => set(day, e.target.value || null)} className="rounded-md px-1 hover:bg-hover" />
+        <input type="time" value={time ?? ""} aria-label="שעה" onChange={(e) => set(day, e.target.value || null)} className="rounded-lg px-1" />
       ) : (
-        <IconButton label="הוסף שעה" onClick={() => setShowTime(true)}><Clock size={14} /></IconButton>
+        <IconButton label="הוסף שעה" onClick={() => setShowTime(true)}><Clock size={15} /></IconButton>
       ))}
-      {quick && (
-        <>
-          <Button className="h-7 px-2 text-xs" onClick={() => onChange(addDays(today, 1))}>מחר</Button>
-          <Button className="h-7 px-2 text-xs" onClick={() => onChange(addDays(today, 7))}>בעוד שבוע</Button>
-        </>
-      )}
-      {value && <IconButton label="נקה" onClick={() => { onChange(null); setShowTime(false); }}><X size={14} /></IconButton>}
     </div>
   );
 }
@@ -213,7 +226,7 @@ export function ParentPicker({ item, onPick, compact }: { item: Item; onPick: (i
       <button type="button" onClick={toggle} className={compact ? "max-w-48 truncate rounded-full bg-surface px-3 py-1 text-[13.5px] font-medium hover:bg-active" : valueBox}>
         {parent ? (
           <span className="truncate">{typeOf(parent)?.icon} {parent.title}</span>
-        ) : compact ? <span>בתוך…</span> : placeholder}
+        ) : compact ? <span>בתוך…</span> : <span className="text-faint">בחר נושא, קורס או פרויקט</span>}
       </button>
     )}>
       {(close) => (
@@ -298,14 +311,15 @@ export function OptionPicker({ field, item, compact }: { field: Field; item: Ite
 
 function SpanEditor({ item }: { item: Item }) {
   const { updateItem } = useStore();
+  const [editing, setEditing] = useState(false);
+  if (!item.span_start && !item.span_end && !editing) {
+    return <button type="button" onClick={() => setEditing(true)} className={valueBox}><span className="font-medium text-accent">בחר תקופה…</span></button>;
+  }
   return (
-    <div className="flex flex-wrap items-center gap-1 px-1">
-      <input type="date" value={item.span_start ?? ""} onChange={(e) => updateItem(item.id, { span_start: e.target.value || null })} className="rounded-md px-1 hover:bg-hover" />
-      <span className="text-faint">עד</span>
-      <input type="date" value={item.span_end ?? ""} min={item.span_start ?? undefined} onChange={(e) => updateItem(item.id, { span_end: e.target.value || null })} className="rounded-md px-1 hover:bg-hover" />
-      {(item.span_start || item.span_end) && (
-        <IconButton label="נקה" onClick={() => updateItem(item.id, { span_start: null, span_end: null })}><X size={14} /></IconButton>
-      )}
+    <div className="flex flex-wrap items-center gap-1 rounded-xl bg-canvas px-2 py-0.5">
+      <input type="date" aria-label="מתאריך" value={item.span_start ?? ""} onChange={(e) => updateItem(item.id, { span_start: e.target.value || null })} className="rounded-lg px-1" />
+      <span className="text-muted">עד</span>
+      <input type="date" aria-label="עד תאריך" value={item.span_end ?? ""} min={item.span_start ?? undefined} onChange={(e) => updateItem(item.id, { span_end: e.target.value || null })} className="rounded-lg px-1" />
     </div>
   );
 }
@@ -431,8 +445,8 @@ function LinksEditor({ item }: { item: Item }) {
         </div>
       ))}
       <Popover width={300} trigger={({ toggle }) => (
-        <button type="button" onClick={toggle} className="flex h-8 items-center gap-1 rounded-md px-2 text-sm text-faint hover:bg-hover">
-          <Plus size={14} /> הוסף קישור
+        <button type="button" onClick={toggle} className="flex h-9 items-center gap-1 rounded-xl bg-canvas px-3 text-[14.5px] font-medium text-accent hover:bg-active">
+          <Plus size={15} /> הוסף קישור
         </button>
       )}>
         {(close) => (

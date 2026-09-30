@@ -1,11 +1,13 @@
 // Screens for browsing: topics, studies, the timeline, search, saved views, and the guide.
 import { useMemo, useState, type ReactNode } from "react";
-import { EmptyNote, QuickAdd, Row, Screen, TypeLabel } from "../components/kit";
+import { EmptyNote, Row, Screen, TypeLabel } from "../components/kit";
 import { Section } from "../components/ui";
 import { addDays, MONTHS_LONG, parseDate, toISODate, todayISO } from "../lib/dates";
 import { openItem, useNav } from "../lib/nav";
 import { useStore } from "../lib/store";
 import type { Item } from "../lib/types";
+import { applyView } from "../lib/viewEngine";
+import { describeView } from "../lib/viewText";
 
 function openCount(children: Item[] | undefined) {
   return (children ?? []).filter((c) => c.status === "open").length;
@@ -15,11 +17,10 @@ export function TopicsScreen() {
   const { items, childrenOf } = useStore();
   const topics = items.filter((i) => i.type_id === "topic" && i.status !== "dropped").sort((a, b) => a.title.localeCompare(b.title, "he"));
   return (
-    <Screen title="נושאים" subtitle="תחומים בחיים. כל נושא אוסף את מה ששייך אליו: משימות, רעיונות, קישורים, קורסים.">
+    <Screen title="נושאים" add={{ type_id: "topic" }} subtitle="תחומים בחיים. כל נושא אוסף את מה ששייך אליו: משימות, רעיונות, קישורים, קורסים.">
       <Section title="כל הנושאים" count={topics.length}>
         {topics.map((t) => <Row key={t.id} item={t} hideType extra={`${openCount(childrenOf.get(t.id))} פריטים פתוחים`} />)}
-        {!topics.length && <EmptyNote>עוד אין נושאים. למשל: השקעות, מודיעין, בריאות.</EmptyNote>}
-        <QuickAdd placeholder="נושא חדש…" fields={{ type_id: "topic" }} />
+        {!topics.length && <EmptyNote>עוד אין נושאים. למשל: השקעות, מודיעין, בריאות. להוספה: הכפתור "הוסף" למטה.</EmptyNote>}
       </Section>
     </Screen>
   );
@@ -36,11 +37,10 @@ export function StudiesScreen() {
     .sort((a, b) => (a.when_at ?? "9999").localeCompare(b.when_at ?? "9999"));
   const tasksOf = (id: string) => (childrenOf.get(id) ?? []).filter((c) => c.type_id === "task" && c.status === "open").length;
   return (
-    <Screen title="לימודים" subtitle="קורסים, ובתוך כל קורס ההרצאות, המשימות והמבחנים שלו.">
+    <Screen title="לימודים" add={{ type_id: "course" }} subtitle="קורסים, ובתוך כל קורס ההרצאות, המשימות והמבחנים שלו.">
       <Section title="קורסים" count={active.length}>
         {active.map((c) => <Row key={c.id} item={c} hideType extra={`${tasksOf(c.id)} משימות פתוחות`} />)}
-        {!active.length && <EmptyNote>עוד אין קורסים.</EmptyNote>}
-        <QuickAdd placeholder="קורס חדש…" fields={{ type_id: "course" }} />
+        {!active.length && <EmptyNote>עוד אין קורסים. להוספה: הכפתור "הוסף" למטה.</EmptyNote>}
       </Section>
       <Section title="מבחנים קרובים" count={exams.length}>
         {exams.length ? exams.map((e) => <Row key={e.id} item={e} hideType />)
@@ -88,7 +88,7 @@ export function TimelineScreen() {
   for (const m of marks) months.set(m.date.slice(0, 7), [...(months.get(m.date.slice(0, 7)) ?? []), m]);
 
   return (
-    <Screen title="ציר זמן" subtitle="התמונה הגדולה: תקופות, קורסים, פרויקטים ומבחנים. מלמעלה למטה.">
+    <Screen title="ציר זמן" add={false} subtitle="התמונה הגדולה: תקופות, קורסים, פרויקטים ומבחנים. מלמעלה למטה.">
       {[...months.entries()].map(([ym, list]) => {
         const d = parseDate(`${ym}-01`);
         return (
@@ -152,7 +152,7 @@ export function SearchScreen() {
       .map((r) => r.i);
   }, [q, items, properties]);
   return (
-    <Screen titleNode={
+    <Screen add={false} titleNode={
       <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="חיפוש בכל מקום…" aria-label="חיפוש"
         className="display w-full border-b-2 border-ink bg-transparent pb-2 text-[32px] outline-none placeholder:text-faint" />
     } subtitle="כותרות, הערות, קישורים ותגיות.">
@@ -163,26 +163,27 @@ export function SearchScreen() {
 }
 
 export function ViewsScreen() {
-  const { views, createView } = useStore();
+  const { views, items, fields, types, properties, itemsById } = useStore();
   const { push } = useNav();
-  const add = async () => {
-    const v = await createView("תצוגה חדשה", "", { filters: [] });
-    if (v) push({ name: "view", arg: v.id });
-  };
   return (
-    <Screen title="התצוגות שלי" subtitle="רשימות ששמרת. כל תצוגה היא סינון ומיון של אותם פריטים, מזווית אחרת.">
+    <Screen title="התצוגות שלי" add={false}
+      subtitle="תצוגה היא רשימה ששמרת: בוחרים אילו פריטים להראות ובאיזה סדר, והיא מתעדכנת לבד. למשל: משימות קלות לערב, או כל הרעיונות בנושא השקעות.">
       <Section title="תצוגות" count={views.length}>
         {views.map((v) => (
           <button key={v.id} type="button" onClick={() => push({ name: "view", arg: v.id })}
-            className="group flex w-full items-center gap-3 border-b border-line py-3.5 text-start">
-            <span className="flex-1 text-[16.5px] font-medium group-hover:underline group-hover:decoration-faint group-hover:underline-offset-4">{v.name}</span>
-            <span className="text-faint">‹</span>
+            className="group flex w-full items-start gap-3 border-b border-line py-3.5 text-start">
+            <span className="grid min-w-0 flex-1 gap-0.5">
+              <span className="text-[16.5px] font-medium group-hover:underline group-hover:decoration-faint group-hover:underline-offset-4">{v.name}</span>
+              <span className="text-[13.5px] text-muted">{describeView(v.config, { types, properties, itemsById, fields })}</span>
+            </span>
+            <span className="shrink-0 pt-0.5 text-[14px] font-medium text-faint">{applyView(items, v.config, fields).length}</span>
           </button>
         ))}
         {!views.length && <EmptyNote>עוד אין תצוגות.</EmptyNote>}
       </Section>
-      <button type="button" onClick={add} className="justify-self-start rounded-full bg-ink px-5 py-2.5 text-[15px] font-medium text-canvas">
-        תצוגה חדשה
+      <button type="button" onClick={() => push({ name: "viewEdit", arg: "new" })}
+        className="justify-self-start rounded-full bg-ink px-5 py-2.5 text-[15px] font-medium text-canvas">
+        + תצוגה חדשה
       </button>
     </Screen>
   );
@@ -203,7 +204,7 @@ function Step({ n, title, children }: { n?: number; title: string; children: Rea
 export function GuideScreen() {
   const { home } = useNav();
   return (
-    <Screen title="איך זה עובד" subtitle="כל המערכת בנויה משלוש מילים.">
+    <Screen title="איך זה עובד" add={false} subtitle="כל המערכת בנויה משלוש מילים.">
       <Section title="הרעיון">
         <Step title="פריט">כל דבר שרוצים לזכור: משימה, הרצאה, נושא, רעיון, פתק, אדם.</Step>
         <Step title="מאפיין">פרט על הפריט: תאריך, חשיבות, מאמץ, לאיזה נושא הוא שייך. כל פריט מקבל רק מה שרלוונטי לו, ואפשר להוסיף מאפיינים משלך.</Step>

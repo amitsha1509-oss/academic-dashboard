@@ -1,5 +1,5 @@
-import { CalendarRange, CircleAlert, Folder, GraduationCap, Inbox, Layers, ListChecks, Plus, Search, Settings, Sun, type LucideIcon } from "lucide-react";
-import { useState } from "react";
+import { CalendarRange, CircleAlert, Folder, GraduationCap, Inbox, Layers, ListChecks, Search, Settings, Sun, type LucideIcon } from "lucide-react";
+import { AddPanel } from "../components/AddPanel";
 import { daysBetween, formatLongDate, formatWhen, todayISO } from "../lib/dates";
 import { openItem, useNav, type ScreenName } from "../lib/nav";
 import { useServerData, useStore } from "../lib/store";
@@ -28,27 +28,6 @@ function useNextUp(today: TodayData | null): { item: Item; label: string } | nul
   const soon = today.upcoming.find((u) => itemsById.has(u.item_id));
   if (soon) return { item: itemsById.get(soon.item_id)!, label: formatWhen(soon.date) };
   return null;
-}
-
-function Capture() {
-  const { createItem, toast } = useStore();
-  const [title, setTitle] = useState("");
-  const save = async () => {
-    const t = title.trim();
-    if (!t) return;
-    setTitle("");
-    const item = await createItem({ title: t });
-    if (item) toast("נשמר בתיבת הקליטה", { label: "פתח", run: () => openItem(item.id) });
-  };
-  return (
-    <form onSubmit={(e) => { e.preventDefault(); save(); }} className="flex items-center gap-2.5 border-b-2 border-ink">
-      <Plus size={22} strokeWidth={2.2} className="shrink-0" />
-      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="מה עלה לך בראש?"
-        enterKeyHint="done" aria-label="רישום מהיר"
-        className="min-w-0 flex-1 bg-transparent py-3 text-[18px] outline-none placeholder:text-faint" />
-      {title.trim() && <button type="submit" className="rounded-full bg-ink px-3.5 py-1 text-sm font-medium text-canvas">שמור</button>}
-    </form>
-  );
 }
 
 function Tile({ to, icon: Icon, name, count, hint, warn }: {
@@ -101,7 +80,7 @@ export function HomeScreen() {
         <h1 className="display text-[48px] leading-none">המרכז</h1>
       </header>
 
-      <Capture />
+      <AddPanel collapsible />
 
       {firstRun ? (
         <button type="button" onClick={() => push({ name: "guide" })}

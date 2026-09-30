@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 
 export type ScreenName =
   | "home" | "today" | "inbox" | "missed" | "tasks" | "topics" | "studies"
-  | "timeline" | "views" | "view" | "item" | "search" | "settings" | "guide";
+  | "timeline" | "views" | "view" | "viewEdit" | "item" | "search" | "settings" | "guide";
 
 export interface Route {
   name: ScreenName;

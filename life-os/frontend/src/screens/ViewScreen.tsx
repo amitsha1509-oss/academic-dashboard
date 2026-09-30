@@ -1,290 +1,257 @@
-// A saved view: filters + grouping + sort, shown as a list or as a two-property matrix.
-// Everything flows top to bottom; nothing scrolls sideways.
-import { MoreHorizontal, X } from "lucide-react";
+// Saved views. A view answers a few plain questions (which items, from where, in what order);
+// the screen shows the answer as a sentence plus the matching items, top to bottom.
+import { Trash2 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
-import { EmptyNote, QuickAdd, Row, Screen } from "../components/kit";
-import { IconButton, MenuItem, MenuLabel, Popover, SearchInput, Section, Tag } from "../components/ui";
+import { EmptyNote, Row, Screen } from "../components/kit";
+import { MenuItem, Popover, SearchInput, Section } from "../components/ui";
 import { NONE, type Field } from "../lib/fields";
 import { useNav } from "../lib/nav";
 import { useStore } from "../lib/store";
-import type { Filter, FilterOp, ItemPatch, ViewConfig } from "../lib/types";
+import type { Item, ItemPatch, ViewConfig } from "../lib/types";
 import { applyView, groupItems } from "../lib/viewEngine";
+import { describeView, toConfig, toSpec, type DateScope, type ViewSpec } from "../lib/viewText";
+import { isDoable, relevantToAny } from "../lib/relevance";
 
-export const OP_LABELS: Record<FilterOp, string> = {
-  is: "הוא", is_not: "אינו", empty: "ריק", not_empty: "לא ריק", contains: "מכיל",
-  before: "לפני", after: "אחרי", next_days: "בימים הקרובים",
-};
-
-const DATE_TOKENS: Record<string, string> = { today: "היום", "+7": "עוד שבוע", "-7": "לפני שבוע", "+30": "עוד חודש" };
-
-function valueLabel(field: Field | undefined, f: Filter, byId: Map<string, { title: string }>): string {
-  if (!field || f.op === "empty" || f.op === "not_empty") return "";
-  if (f.op === "next_days") return `${f.value ?? 7} ימים`;
-  if (f.op === "before" || f.op === "after") return DATE_TOKENS[String(f.value)] ?? String(f.value ?? "");
-  const vals = Array.isArray(f.value) ? (f.value as string[]) : f.value !== undefined ? [String(f.value)] : [];
-  if (field.kind === "parent") return vals.map((v) => byId.get(v)?.title ?? "?").join(", ");
-  const buckets = field.allBuckets?.() ?? [];
-  return vals.map((v) => buckets.find((b) => b.key === v)?.label ?? v).join(", ");
-}
-
-function FilterForm({ filter, fields, onChange }: { filter: Filter; fields: Field[]; onChange: (f: Filter) => void }) {
-  const { items, childrenOf } = useStore();
-  const [q, setQ] = useState("");
-  const field = fields.find((f) => f.key === filter.field);
-  if (!field) return null;
-  const vals = Array.isArray(filter.value) ? (filter.value as string[]) : filter.value !== undefined ? [String(filter.value)] : [];
-  const toggle = (k: string) => onChange({ ...filter, value: vals.includes(k) ? vals.filter((v) => v !== k) : [...vals, k] });
-  const select = "w-full rounded-xl bg-surface px-3 py-2 text-[15px]";
-
-  let editor: ReactNode = null;
-  if (filter.op === "is" || filter.op === "is_not") {
-    if (field.kind === "parent") {
-      const list = items.filter((i) => childrenOf.has(i.id) && i.title.includes(q)).slice(0, 25);
-      editor = (
-        <>
-          <SearchInput value={q} onChange={setQ} autoFocus={false} placeholder="חפש פריט…" />
-          {list.map((i) => <MenuItem key={i.id} active={vals.includes(i.id)} onClick={() => toggle(i.id)}>{i.title}</MenuItem>)}
-        </>
-      );
-    } else if (field.allBuckets) {
-      editor = field.allBuckets().map((b) => (
-        <MenuItem key={b.key} active={vals.includes(b.key)} onClick={() => toggle(b.key)}>
-          {b.key === NONE ? <span className="text-muted">{b.label}</span> : <Tag color={b.color}>{b.icon ? `${b.icon} ` : ""}{b.label}</Tag>}
-        </MenuItem>
-      ));
-    } else {
-      editor = <input autoFocus value={String(filter.value ?? "")} onChange={(e) => onChange({ ...filter, value: e.target.value })} className={select} />;
-    }
-  } else if (filter.op === "contains") {
-    editor = <input autoFocus value={String(filter.value ?? "")} onChange={(e) => onChange({ ...filter, value: e.target.value })} placeholder="טקסט…" className={select} />;
-  } else if (filter.op === "before" || filter.op === "after") {
-    const v = String(filter.value ?? "today");
-    editor = (
-      <div className="space-y-2">
-        <select value={DATE_TOKENS[v] ? v : "custom"} onChange={(e) => onChange({ ...filter, value: e.target.value === "custom" ? "" : e.target.value })} className={select}>
-          {Object.entries(DATE_TOKENS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-          <option value="custom">תאריך מסוים…</option>
-        </select>
-        {!DATE_TOKENS[v] && <input type="date" value={v} onChange={(e) => onChange({ ...filter, value: e.target.value })} className={select} />}
-      </div>
-    );
-  } else if (filter.op === "next_days") {
-    editor = (
-      <label className="flex items-center gap-2 text-sm">
-        <input type="number" min={1} value={Number(filter.value ?? 7)} onChange={(e) => onChange({ ...filter, value: Number(e.target.value) || 7 })} className={`${select} w-20`} />
-        ימים
-      </label>
-    );
-  }
-
-  return (
-    <div className="space-y-2 p-1.5">
-      <div className="flex gap-1.5">
-        <select value={filter.field} onChange={(e) => {
-          const nf = fields.find((f) => f.key === e.target.value)!;
-          onChange({ field: nf.key, op: nf.ops[0] as FilterOp });
-        }} className={select}>
-          {fields.filter((f) => f.ops.length).map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
-        </select>
-        <select value={filter.op} onChange={(e) => onChange({ field: filter.field, op: e.target.value as FilterOp })} className={select}>
-          {field.ops.map((op) => <option key={op} value={op}>{OP_LABELS[op as FilterOp]}</option>)}
-        </select>
-      </div>
-      {editor && <div className="max-h-56 overflow-y-auto">{editor}</div>}
-    </div>
-  );
-}
-
-function Control({ active, onClick, children }: { active?: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button type="button" onClick={onClick}
-      className={`rounded-full px-3.5 py-1.5 text-[14px] font-medium whitespace-nowrap transition-colors ${active ? "bg-ink text-canvas" : "bg-surface hover:bg-active"}`}>
-      {children}
-    </button>
-  );
-}
-
-function FieldMenu({ fields, current, onPick, noneLabel, close }: {
-  fields: Field[]; current?: string | null; onPick: (k: string | null) => void; noneLabel?: string; close: () => void;
-}) {
-  return (
-    <>
-      {noneLabel && <MenuItem active={!current} onClick={() => { onPick(null); close(); }}>{noneLabel}</MenuItem>}
-      {fields.map((f) => <MenuItem key={f.key} active={current === f.key} onClick={() => { onPick(f.key); close(); }}>{f.key === "parent" ? "בתוך" : f.label}</MenuItem>)}
-    </>
-  );
+function basePatchOf(spec: ViewSpec): ItemPatch {
+  const patch: ItemPatch = {};
+  if (spec.types.length === 1) patch.type_id = spec.types[0];
+  if (spec.parent) patch.parent_id = spec.parent;
+  return patch;
 }
 
 export function ViewScreen({ id }: { id: string }) {
-  const { views, items, fields, itemsById, updateView, deleteView, createView } = useStore();
-  const { back, push } = useNav();
+  const { views, items, fields, types, properties, itemsById } = useStore();
+  const { push } = useNav();
   const view = views.find((v) => v.id === id);
   const config: ViewConfig = view?.config ?? {};
   const shown = useMemo(() => applyView(items, config, fields), [items, config, fields]);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  if (!view) return <Screen title="התצוגה לא נמצאה">{null}</Screen>;
+  if (!view) return <Screen title="התצוגה לא נמצאה" add={false}>{null}</Screen>;
 
-  const set = (patch: Partial<ViewConfig>) => updateView(view.id, { config: { ...config, ...patch } });
-  const byKey = new Map(fields.map((f) => [f.key, f]));
-  const filters = config.filters ?? [];
-  const groupable = fields.filter((f) => !["title", "notes", "links"].includes(f.key));
-  const axisFields = fields.filter((f) => f.allBuckets && f.setBucket);
-  const matrix = config.layout === "grid";
-  const groupBy = config.groupBy ? byKey.get(config.groupBy) : undefined;
-
-  // New items created inside the view get its filter values, so they show up here.
-  const basePatch: ItemPatch = {};
-  for (const f of filters) {
-    const field = byKey.get(f.field);
-    const vals = Array.isArray(f.value) ? f.value : f.value !== undefined ? [f.value] : [];
-    if (f.op === "is" && field?.setBucket && vals.length === 1) {
-      const p = field.setBucket(String(vals[0]));
-      Object.assign(basePatch, { ...p, props: basePatch.props || p.props ? { ...basePatch.props, ...p.props } : undefined });
-    }
-  }
-  if (!basePatch.props) delete basePatch.props;
-
-  const setFilter = (i: number, f: Filter) => set({ filters: filters.map((x, j) => (j === i ? f : x)) });
+  const spec = toSpec(config, properties);
+  const base = basePatchOf(spec);
+  const groupBy = config.groupBy ? fields.find((f) => f.key === config.groupBy) : undefined;
 
   return (
-    <Screen
-      actions={
-        <Popover width={220} trigger={({ toggle }) => <IconButton label="עוד" onClick={toggle}><MoreHorizontal size={20} /></IconButton>}>
-          {(close) => (
-            <>
-              <MenuItem onClick={async () => {
-                close();
-                const v = await createView(`${view.name} (עותק)`, "", config);
-                if (v) push({ name: "view", arg: v.id });
-              }}>שכפל תצוגה</MenuItem>
-              <MenuItem danger onClick={() => { close(); setConfirmDelete(true); }}>מחק תצוגה</MenuItem>
-            </>
-          )}
-        </Popover>
-      }
-      titleNode={
-        <input value={view.name} onChange={(e) => updateView(view.id, { name: e.target.value })} aria-label="שם התצוגה"
-          className="display w-full bg-transparent text-[36px] outline-none md:text-[42px]" />
-      }
-    >
-      {confirmDelete && (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-danger-soft px-4 py-3">
-          <span className="flex-1 text-[15px]">למחוק את התצוגה? הפריטים עצמם לא יימחקו.</span>
-          <Control onClick={() => setConfirmDelete(false)}>ביטול</Control>
-          <button type="button" onClick={() => { deleteView(view.id); back(); }} className="rounded-full bg-danger px-3.5 py-1.5 text-[14px] font-medium text-white">מחק</button>
-        </div>
-      )}
-
-      <div className="grid gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {filters.map((f, i) => {
-            const field = byKey.get(f.field);
-            return (
-              <Popover key={i} width={300} trigger={({ toggle }) => (
-                <span className="inline-flex items-center rounded-full bg-accent-soft text-[14px] font-medium text-accent">
-                  <button type="button" onClick={toggle} className="py-1.5 ps-3.5 pe-1">
-                    {field ? (field.key === "parent" ? "בתוך" : field.label) : "?"} {OP_LABELS[f.op]} {valueLabel(field, f, itemsById)}
-                  </button>
-                  <button type="button" aria-label="הסר סינון" onClick={() => set({ filters: filters.filter((_, j) => j !== i) })} className="pe-2.5 opacity-70 hover:opacity-100">
-                    <X size={14} />
-                  </button>
-                </span>
-              )}>
-                {() => <FilterForm filter={f} fields={fields} onChange={(nf) => setFilter(i, nf)} />}
-              </Popover>
-            );
-          })}
-          <Popover width={240} trigger={({ toggle }) => <Control onClick={toggle}>+ סינון</Control>}>
-            {(close) => (
-              <>
-                <MenuLabel>סנן לפי</MenuLabel>
-                <FieldMenu fields={fields.filter((f) => f.ops.length)} close={close}
-                  onPick={(k) => { const f = byKey.get(k!)!; set({ filters: [...filters, { field: f.key, op: f.ops[0] as FilterOp }] }); }} />
-              </>
-            )}
-          </Popover>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Control active={!matrix} onClick={() => set({ layout: "list" })}>רשימה</Control>
-          <Control active={matrix} onClick={() => set({ layout: "grid", grid: config.grid ?? { x: "urgency", y: "importance" } })}>מטריצה</Control>
-          <span className="mx-1 h-5 w-px bg-line" />
-          {!matrix && (
-            <Popover width={220} trigger={({ toggle }) => <Control active={!!groupBy} onClick={toggle}>{groupBy ? `קיבוץ: ${groupBy.key === "parent" ? "בתוך" : groupBy.label}` : "קיבוץ"}</Control>}>
-              {(close) => <FieldMenu fields={groupable} current={config.groupBy} noneLabel="בלי קיבוץ" close={close} onPick={(k) => set({ groupBy: k })} />}
-            </Popover>
-          )}
-          {matrix && (["y", "x"] as const).map((axis) => (
-            <Popover key={axis} width={220} trigger={({ toggle }) => (
-              <Control onClick={toggle}>{axis === "y" ? "קודם לפי" : "ואז לפי"}: {byKey.get(config.grid?.[axis] ?? "")?.label ?? "בחר"}</Control>
-            )}>
-              {(close) => <FieldMenu fields={axisFields} current={config.grid?.[axis]} close={close}
-                onPick={(k) => set({ grid: { x: config.grid?.x ?? "urgency", y: config.grid?.y ?? "importance", [axis]: k! } })} />}
-            </Popover>
-          ))}
-          <Popover width={220} trigger={({ toggle }) => (
-            <Control active={!!config.sort} onClick={toggle}>{config.sort ? `מיון: ${byKey.get(config.sort.field)?.label ?? ""}` : "מיון"}</Control>
-          )}>
-            {(close) => (
-              <>
-                {config.sort && (
-                  <div className="flex gap-1 p-1">
-                    {(["asc", "desc"] as const).map((d) => (
-                      <Control key={d} active={config.sort!.dir === d} onClick={() => set({ sort: { ...config.sort!, dir: d } })}>{d === "asc" ? "עולה" : "יורד"}</Control>
-                    ))}
-                  </div>
-                )}
-                <FieldMenu fields={groupable} current={config.sort?.field} noneLabel="לפי תאריך יצירה" close={close}
-                  onPick={(k) => set({ sort: k ? { field: k, dir: config.sort?.dir ?? "asc" } : null })} />
-              </>
-            )}
-          </Popover>
-          <Control active={config.showDone} onClick={() => set({ showDone: !config.showDone })}>{config.showDone ? "כולל שהושלמו" : "רק פתוחים"}</Control>
-          <span className="ms-auto text-[14px] font-medium text-faint">{shown.length} פריטים</span>
-        </div>
-      </div>
-
-      {matrix ? <MatrixLayout config={config} fields={fields} items={shown} basePatch={basePatch} /> : (
-        groupBy ? groupItems(shown, groupBy).map((g) => (
+    <Screen title={view.name} subtitle={describeView(config, { types, properties, itemsById, fields })}
+      add={{ type_id: base.type_id ?? null, parent_id: base.parent_id ?? null }}
+      actions={<button type="button" onClick={() => push({ name: "viewEdit", arg: view.id })}
+        className="rounded-full bg-ink px-4 py-1.5 text-[14.5px] font-medium text-canvas">ערוך תצוגה</button>}>
+      <div className="-mt-4 text-[14px] font-medium text-faint">{shown.length} פריטים</div>
+      {config.layout === "grid" ? <Matrix items={shown} fields={fields} /> : groupBy ? (
+        groupItems(shown, groupBy).map((g) => (
           <Section key={g.bucket.key} title={g.bucket.label} count={g.items.length}>
             {g.items.map((i) => <Row key={i.id} item={i} />)}
           </Section>
-        )) : (
-          <div>
-            {shown.map((i) => <Row key={i.id} item={i} />)}
-            {!shown.length && <EmptyNote>אין פריטים שמתאימים לתצוגה הזו.</EmptyNote>}
-            <QuickAdd placeholder="פריט חדש בתצוגה הזו…" fields={basePatch} />
-          </div>
-        )
+        ))
+      ) : (
+        <div>
+          {shown.map((i) => <Row key={i.id} item={i} />)}
+          {!shown.length && <EmptyNote>אין כרגע פריטים שמתאימים לתצוגה הזו.</EmptyNote>}
+        </div>
       )}
     </Screen>
   );
 }
 
-function MatrixLayout({ config, fields, items, basePatch }: { config: ViewConfig; fields: Field[]; items: ReturnType<typeof applyView>; basePatch: ItemPatch }) {
-  const x = fields.find((f) => f.key === config.grid?.x);
-  const y = fields.find((f) => f.key === config.grid?.y);
-  if (!x?.allBuckets || !y?.allBuckets || !x.setBucket || !y.setBucket) return <EmptyNote>בחר שני מאפייני בחירה.</EmptyNote>;
-  const xs = x.allBuckets().filter((b) => b.key !== NONE);
-  const ys = y.allBuckets().filter((b) => b.key !== NONE);
-  const unsorted = items.filter((i) => x.buckets(i)[0]?.key === NONE || y.buckets(i)[0]?.key === NONE);
+const QUADRANTS = [
+  ["high", "high", "לעשות עכשיו", "חשוב ודחוף"],
+  ["high", "low", "לתכנן", "חשוב, לא דחוף"],
+  ["low", "high", "לקצר או להעביר", "דחוף, לא חשוב"],
+  ["low", "low", "לוותר", "לא חשוב ולא דחוף"],
+] as const;
+
+function Matrix({ items, fields }: { items: Item[]; fields: Field[] }) {
+  const imp = fields.find((f) => f.key === "importance");
+  const urg = fields.find((f) => f.key === "urgency");
+  if (!imp || !urg) return <EmptyNote>המאפיינים חשיבות ודחיפות הוסתרו בהגדרות.</EmptyNote>;
+  const key = (f: Field, i: Item) => f.buckets(i)[0]?.key;
+  const unsorted = items.filter((i) => key(imp, i) === NONE || key(urg, i) === NONE);
   return (
     <>
-      {ys.flatMap((yb) => xs.map((xb) => {
-        const list = items.filter((i) => y.buckets(i).some((b) => b.key === yb.key) && x.buckets(i).some((b) => b.key === xb.key));
-        const patch = { ...basePatch, props: { ...basePatch.props, ...y.setBucket!(yb.key).props, ...x.setBucket!(xb.key).props } };
+      {QUADRANTS.map(([ik, uk, title, sub]) => {
+        const list = items.filter((i) => key(imp, i) === ik && key(urg, i) === uk);
         return (
-          <Section key={`${yb.key}|${xb.key}`} title={`${yb.label} · ${xb.label}`} count={list.length}>
-            {list.map((i) => <Row key={i.id} item={i} />)}
-            <QuickAdd placeholder="חדש…" fields={patch} />
+          <Section key={title} title={title} sub={sub} count={list.length}>
+            {list.length ? list.map((i) => <Row key={i.id} item={i} />) : <EmptyNote>ריק.</EmptyNote>}
           </Section>
         );
-      }))}
+      })}
       {unsorted.length > 0 && (
-        <Section title="לא מסווג" count={unsorted.length} sub={`חסר ${y.label} או ${x.label}`}>
-          {unsorted.map((i) => <Row key={i.id} item={i} />)}
-        </Section>
+        <Section title="עוד לא סווג" count={unsorted.length}>{unsorted.map((i) => <Row key={i.id} item={i} />)}</Section>
       )}
     </>
   );
 }
 
+// ─── Editing a view: plain questions with tappable answers ───
+
+function Opt({ on, onClick, children, color }: { on?: boolean; onClick: () => void; children: ReactNode; color?: string }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={!!on}
+      className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[14px] font-medium whitespace-nowrap transition-colors ${
+        on ? "bg-ink text-canvas" : "bg-canvas hover:bg-active"}`}>
+      {color && <span className="h-2 w-2 rounded-full" style={{ background: `var(--dot-${color}, var(--dot-gray))` }} />}
+      {children}
+    </button>
+  );
+}
+
+function Question({ q, hint, children }: { q: string; hint?: string; children: ReactNode }) {
+  return (
+    <section className="grid gap-2.5 rounded-[20px] bg-surface p-4">
+      <div className="grid gap-0.5">
+        <h2 className="display text-[18px] font-bold">{q}</h2>
+        {hint && <p className="text-[13.5px] text-muted">{hint}</p>}
+      </div>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </section>
+  );
+}
+
+const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+
+export function ViewEditScreen({ id }: { id: string }) {
+  const { views, items, fields, types, properties, itemsById, childrenOf, createView, updateView, deleteView, toast } = useStore();
+  const { back, home, push } = useNav();
+  const existing = id === "new" ? undefined : views.find((v) => v.id === id);
+  const [name, setName] = useState(existing?.name ?? "");
+  const [spec, setSpec] = useState<ViewSpec>(() => toSpec(existing?.config ?? {}, properties));
+  const [q, setQ] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const set = (patch: Partial<ViewSpec>) => setSpec((s) => ({ ...s, ...patch }));
+
+  // Only ask what fits the chosen types; answers that stop fitting are dropped.
+  const fits = (key: string) => relevantToAny(spec.types, key);
+  const doable = !spec.types.length || spec.types.some(isDoable);
+  const matrixFits = spec.types.length === 1 && spec.types[0] === "task";
+  const effective: ViewSpec = {
+    ...spec,
+    parent: fits("parent") ? spec.parent : null,
+    choices: Object.fromEntries(Object.entries(spec.choices).filter(([k]) => fits(k))),
+    date: fits("due") ? spec.date : "all",
+    showDone: doable ? spec.showDone : true,
+    matrix: matrixFits && spec.matrix,
+    sort: spec.sort === "due" && !fits("due") ? "created" : spec.sort === "when" && !fits("when") ? "created" : spec.sort,
+  };
+  const config = toConfig(effective);
+  const preview = useMemo(() => applyView(items, config, fields), [items, config, fields]);
+  const liveTypes = types.filter((t) => !t.archived);
+  const choiceProps = properties.filter((p) => !p.archived && (p.type === "choice" || p.type === "multi") && p.options.length);
+  const containers = items
+    .filter((i) => ["topic", "course", "project"].includes(i.type_id ?? "") && i.status !== "dropped")
+    .sort((a, b) => (childrenOf.get(b.id)?.length ?? 0) - (childrenOf.get(a.id)?.length ?? 0))
+    .slice(0, 6);
+  const parent = spec.parent ? itemsById.get(spec.parent) : undefined;
+  const placeChips = parent && !containers.includes(parent) ? [parent, ...containers.slice(0, 5)] : containers;
+  const groupOptions: { key: string | null; label: string }[] = [
+    { key: null, label: "בלי" }, { key: "type", label: "סוג" }, { key: "parent", label: "מה שהם בתוכו" },
+    ...choiceProps.filter((p) => relevantToAny(spec.types, p.id)).map((p) => ({ key: p.id, label: p.name })),
+  ];
+
+  const save = async () => {
+    const finalName = name.trim() || "תצוגה בלי שם";
+    if (existing) {
+      await updateView(existing.id, { name: finalName, config });
+      back();
+    } else {
+      const v = await createView(finalName, "", config);
+      if (v) { back(); setTimeout(() => push({ name: "view", arg: v.id }), 420); }
+    }
+    toast("התצוגה נשמרה");
+  };
+
+  return (
+    <Screen add={false} title={existing ? "עריכת תצוגה" : "תצוגה חדשה"}
+      subtitle="תענה על השאלות. כל תשובה לא חובה, ובתחתית רואים מה ייכנס.">
+      <section className="grid gap-2">
+        <h2 className="display text-[18px] font-bold">איך לקרוא לה?</h2>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="למשל: משימות קלות לערב"
+          className="border-b-2 border-ink bg-transparent py-2 text-[20px] outline-none placeholder:text-faint" />
+      </section>
+
+      <Question q="אילו פריטים?" hint="בלי בחירה, כל הסוגים.">
+        {liveTypes.map((t) => <Opt key={t.id} color={t.color} on={spec.types.includes(t.id)} onClick={() => set({ types: toggle(spec.types, t.id) })}>{t.name}</Opt>)}
+      </Question>
+
+      {fits("parent") && <Question q="רק מתוך נושא, קורס או פרויקט?" hint="בלי בחירה, מכל מקום.">
+        {placeChips.map((c) => <Opt key={c.id} on={spec.parent === c.id} onClick={() => set({ parent: spec.parent === c.id ? null : c.id })}>{c.title}</Opt>)}
+        <Popover width={280} trigger={({ toggle: t }) => <Opt onClick={t}>אחר…</Opt>}>
+          {(close) => (
+            <>
+              <SearchInput value={q} onChange={setQ} placeholder="חפש…" />
+              {items.filter((i) => q && i.title.includes(q)).slice(0, 20).map((i) => (
+                <MenuItem key={i.id} onClick={() => { set({ parent: i.id }); setQ(""); close(); }}>{i.title}</MenuItem>
+              ))}
+            </>
+          )}
+        </Popover>
+      </Question>}
+
+      {choiceProps.filter((p) => fits(p.id)).map((p) => (
+        <Question key={p.id} q={`${p.name}?`} hint="בלי בחירה, לא משנה.">
+          {p.options.map((o) => (
+            <Opt key={o.id} color={o.color} on={(spec.choices[p.id] ?? []).includes(o.id)}
+              onClick={() => set({ choices: { ...spec.choices, [p.id]: toggle(spec.choices[p.id] ?? [], o.id) } })}>{o.label}</Opt>
+          ))}
+        </Question>
+      ))}
+
+      {fits("due") && <Question q="תאריך יעד?">
+        {([["all", "לא משנה"], ["late", "באיחור"], ["week", "בשבוע הקרוב"], ["none", "בלי תאריך"]] as [DateScope, string][]).map(([k, l]) => (
+          <Opt key={k} on={spec.date === k} onClick={() => set({ date: k })}>{l}</Opt>
+        ))}
+      </Question>}
+
+      {doable && <Question q="גם דברים שהושלמו?">
+        <Opt on={!spec.showDone} onClick={() => set({ showDone: false })}>רק פתוחים</Opt>
+        <Opt on={spec.showDone} onClick={() => set({ showDone: true })}>גם שהושלמו</Opt>
+      </Question>}
+
+      {matrixFits && <Question q="איך להציג?">
+        <Opt on={!spec.matrix} onClick={() => set({ matrix: false })}>רשימה</Opt>
+        <Opt on={spec.matrix} onClick={() => set({ matrix: true })}>לפי חשיבות ודחיפות</Opt>
+      </Question>}
+
+      {!effective.matrix && (
+        <>
+          <Question q="באיזה סדר?">
+            {([["created", "החדשים קודם"], ["due", "תאריך יעד"], ["when", "מתי"], ["title", "שם"]] as [ViewSpec["sort"], string][])
+              .filter(([k]) => k === "created" || k === "title" || fits(k)).map(([k, l]) => (
+              <Opt key={k} on={effective.sort === k} onClick={() => set({ sort: k })}>{l}</Opt>
+            ))}
+          </Question>
+          <Question q="לחלק לקבוצות?">
+            {groupOptions.map((g) => <Opt key={g.key ?? "none"} on={spec.group === g.key} onClick={() => set({ group: g.key })}>{g.label}</Opt>)}
+          </Question>
+        </>
+      )}
+
+      <section className="grid gap-1">
+        <div className="flex items-baseline gap-2">
+          <h2 className="display text-[20px]">ייכנסו {preview.length} פריטים</h2>
+        </div>
+        <p className="text-[14px] text-muted">{describeView(config, { types, properties, itemsById, fields })}</p>
+        <div className="pt-1">
+          {preview.slice(0, 5).map((i) => <div key={i.id} className="border-b border-line py-2 text-[15px]">{i.title}</div>)}
+          {preview.length > 5 && <div className="py-2 text-[14px] text-faint">ועוד {preview.length - 5}</div>}
+        </div>
+      </section>
+
+      {confirmDelete && existing && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-danger-soft px-4 py-3">
+          <span className="flex-1 text-[15px]">למחוק את התצוגה? הפריטים עצמם לא יימחקו.</span>
+          <Opt onClick={() => setConfirmDelete(false)}>ביטול</Opt>
+          <button type="button" onClick={() => { deleteView(existing.id); home(); }} className="rounded-full bg-danger px-3.5 py-1.5 text-[14px] font-medium text-white">מחק</button>
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={save} className="rounded-full bg-ink px-6 py-2.5 text-[16px] font-medium text-canvas">שמור תצוגה</button>
+        <button type="button" onClick={back} className="rounded-full bg-surface px-5 py-2.5 text-[15px] font-medium">ביטול</button>
+        <div className="flex-1" />
+        {existing && (
+          <button type="button" onClick={() => setConfirmDelete(true)} aria-label="מחק תצוגה" className="rounded-full p-2.5 text-danger hover:bg-danger-soft"><Trash2 size={18} /></button>
+        )}
+      </div>
+    </Screen>
+  );
+}
